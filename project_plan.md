@@ -51,3 +51,45 @@
 1. Cases with complex medical or medication-related risks that exceed the scope of a wellness consult (e.g., active medication interactions or undiagnosed conditions requiring clinical review)
 2. Sparse or contradictory inputs that may lead to generic or weak outputs (e.g., minimal details making it hard to personalize or identify risks)
 3. Inputs with potential safety signals that are not clearly flagged (e.g., subtle mentions of mental health concerns or substance use that need escalation)
+
+---
+
+## 7. Risks and Governance
+
+The system may fail by:
+- producing overly confident language,
+- missing subtle risk indicators,
+- generating outputs that appear correct but are incomplete.
+
+The system should not be trusted for:
+- diagnosis
+- treatment decisions
+- high-risk or unclear cases without review
+
+Governance controls include:
+- mandatory human review for flagged cases
+- avoidance of diagnostic language
+- clear positioning as a draft-generation tool
+- use of synthetic data only for development
+
+---
+
+## 8. Plan for the Week 6 Check-in
+
+By Week 6, the following will be completed:
+
+- a working Streamlit app with intake input and generated outputs
+- a first version of the structured prompt
+- initial evaluation cases
+- baseline vs structured output comparison on at least one case
+
+This will allow demonstration of:
+- core functionality
+- early evaluation
+- initial improvements over baseline
+
+---
+
+## 9. Pair Request
+
+Not applicable.
