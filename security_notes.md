@@ -31,3 +31,15 @@ This system is heuristic-based and not a substitute for formal de-identification
 ## Usage Tracking
 
 Version 1.2.5 introduces local usage tracking. This tracks only application interactions and does not store any identifying user or patient information.
+
+## PID Control Mechanism
+
+Version includes a session-based toggle to control identifier handling. By default, identifiers are removed. A controlled override allows identifiers during testing, but this mode is not suitable for real patient data.
+
+## Version 1.3 Storage and QC Controls
+
+- Identifier visibility may be enabled only during interaction and controlled testing
+- Input and output are sanitized before any save operation
+- QC checks both sanitized input and sanitized output before storage
+- Saves are blocked when QC fails or PID confirmation is missing
+- Local and future cloud save paths must receive sanitized content only

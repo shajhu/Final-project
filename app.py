@@ -1,157 +1,177 @@
 # API key is loaded from .env for local development
 # Do not hardcode secrets
 
-# Version 1.2.1: Identifier protection, placeholder replacement, PID handling switch
+import json
 import os
+import re
+from datetime import datetime
+from pathlib import Path
+
 import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
-import re
-from pathlib import Path
-import json
 
-# When False, all identifiers are removed and replaced with placeholders
-# When True (future use), identifiers may be retained under controlled conditions
-ALLOW_PID = False
+load_dotenv()
 
+MODEL_NAME = "gpt-4.1-mini"  # If model access fails, gpt-4o-mini may be used as a fallback.
 BASE_DIR = Path(__file__).resolve().parent
+OUTPUTS_DIR = BASE_DIR / "outputs"
 USAGE_FILE = BASE_DIR / "usage.json"
 
-def initialize_usage():
+st.set_page_config(page_title="Intake-to-Note Assistant", layout="centered")
+
+# Session state used to persist PID toggle across Streamlit reruns
+if "ALLOW_PID" not in st.session_state:
+    st.session_state["ALLOW_PID"] = False
+if "run_incremented" not in st.session_state:
+    st.session_state["run_incremented"] = False
+if "draft_data" not in st.session_state:
+    st.session_state["draft_data"] = None
+
+
+def initialize_usage() -> None:
     if not USAGE_FILE.exists():
-        data = {
-            "total_runs": 0,
-            "total_reviews_submitted": 0
-        }
-        USAGE_FILE.write_text(json.dumps(data, indent=2))
+        USAGE_FILE.write_text(
+            json.dumps({"total_runs": 0, "total_reviews_submitted": 0}, indent=2),
+            encoding="utf-8",
+        )
 
-initialize_usage()
 
-def increment_runs():
-    if "run_incremented" not in st.session_state:
-        st.session_state["run_incremented"] = True
-    data = json.loads(USAGE_FILE.read_text())
+def get_usage() -> dict:
+    try:
+        return json.loads(USAGE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {"total_runs": 0, "total_reviews_submitted": 0}
+
+
+def increment_runs() -> None:
+    data = get_usage()
     data["total_runs"] += 1
-    USAGE_FILE.write_text(json.dumps(data, indent=2))
+    USAGE_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
-def increment_reviews():
-    data = json.loads(USAGE_FILE.read_text())
+
+def increment_reviews() -> None:
+    data = get_usage()
     data["total_reviews_submitted"] += 1
-    USAGE_FILE.write_text(json.dumps(data, indent=2))
+    USAGE_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
-def get_usage():
-    return json.loads(USAGE_FILE.read_text())
 
-def sanitize_identifiers(text: str) -> str:
-    if ALLOW_PID:
-        return text
-    # Emails
+def mask_identifiers(text: str) -> str:
+    if not text:
+        return ""
+
     text = re.sub(r"\b[\w\.-]+@[\w\.-]+\.\w+\b", "[EMAIL]", text)
-    # Phone numbers
     text = re.sub(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b", "[PHONE]", text)
-    # DOB
     text = re.sub(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b", "[DOB]", text)
-    # SSN
     text = re.sub(r"\b\d{3}-\d{2}-\d{4}\b", "[SSN]", text)
-    # ZIP codes
     text = re.sub(r"\b\d{5}(?:-\d{4})?\b", "[ZIP]", text)
-    # Addresses (simple heuristic: number + street name)
     text = re.sub(
         r"\b\d{1,5}\s+[A-Za-z0-9\s]+\s(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Drive|Dr|Court|Ct|Boulevard|Blvd)\b",
         "[ADDRESS]",
         text,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
-    # Named label patterns
     text = re.sub(r"(Name:\s*)([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)", r"\1[NAME]", text)
-    # Likely full names
     text = re.sub(r"\b([A-Z][a-z]{2,}\s[A-Z][a-z]{2,})\b", "[NAME]", text)
-    # Long numeric IDs
     text = re.sub(r"\b\d{4,}\b", "[ID]", text)
     return text
 
+
+def sanitize_identifiers(text: str) -> str:
+    if st.session_state["ALLOW_PID"]:
+        return text
+    return mask_identifiers(text)
+
+
+def sanitize_for_storage(text: str) -> str:
+    return mask_identifiers(text)
+
+
 def sanitization_confidence_check(text: str) -> str:
-    """
-    Returns:
-    - HIGH: likely no identifiers remaining
-    - MEDIUM: possible identifiers remain
-    - LOW: strong indication identifiers remain
-    """
-    # Suspicious patterns (capitalized words not replaced)
     possible_names = re.findall(r"\b[A-Z][a-z]{2,}\b", text)
-    # Suspicious long numbers
     possible_ids = re.findall(r"\b\d{4,}\b", text)
-    # If still raw email-like patterns
     possible_email = re.search(r"@", text)
+
     score = 0
     if len(possible_names) > 5:
         score += 1
-    if len(possible_ids) > 0:
+    if possible_ids:
         score += 1
     if possible_email:
         score += 2
+
     if score >= 2:
         return "LOW"
-    elif score == 1:
+    if score == 1:
         return "MEDIUM"
-    else:
-        return "HIGH"
+    return "HIGH"
 
-load_dotenv()
 
-MODEL_NAME = "gpt-4.1-mini"  # If model access fails, gpt-4o-mini may be used as a fallback
+def qc_sanitization_check(text: str) -> dict:
+    issues = []
 
-st.set_page_config(page_title="Intake-to-Note Assistant", layout="centered")
-st.title("Intake-to-Note Assistant")
-st.write("Converts intake responses into a structured review note, draft follow-up, and flagged concerns for human review.")
+    if "@" in text:
+        issues.append("Possible email detected")
+    if re.search(r"\b\d{3}-\d{2}-\d{4}\b", text):
+        issues.append("Possible SSN detected")
+    if re.search(r"\b[A-Z][a-z]+ [A-Z][a-z]+\b", text):
+        issues.append("Possible name detected")
+    if re.search(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b", text):
+        issues.append("Possible phone detected")
 
-# Sidebar privacy and safety notes
-with st.sidebar:
-    st.header("Privacy and Safety Notes")
-    st.markdown("""
-    - Use synthetic or non-identifying data for testing
-    - **Do not enter real patient-identifying information**
-    - Outputs are drafts and require human review
-    - High-risk cases should not be handled automatically
-    - This app is not intended for diagnosis or autonomous treatment decisions
-    """)
+    confidence = sanitization_confidence_check(text)
+    return {
+        "issues": issues,
+        "confidence": confidence,
+        "safe": len(issues) == 0 and confidence == "HIGH",
+    }
 
-practitioner_types = [
-    "Pharmacist",
-    "Nurse",
-    "Wellness Consultant",
-    "Occupational Therapist",
-    "General Medical Reviewer"
-]
-
-practitioner = st.selectbox("Practitioner Type", practitioner_types)
-
-intake_text = st.text_area("Paste Intake Form Responses", height=200)
-
-col1, col2 = st.columns(2)
-with col1:
-    client_age = st.text_input("Client Age (optional)")
-    client_goals = st.text_input("Client Goals (optional)")
-with col2:
-    current_meds = st.text_input("Current Medications/Supplements (optional)")
-    relevant_concerns = st.text_input("Relevant Concerns/Safety Flags (optional)")
-
-tone = st.selectbox("Preferred Tone (optional)", ["Gentle", "Direct", "Professional"], index=2)
 
 def detect_flags(intake_text: str) -> list[str]:
     keywords = [
-        "fall", "dizziness", "fainting", "medication", "blood thinner", "pregnant", "chest pain", "severe",
-        "confusion", "emergency", "interaction", "allergy", "shortness of breath", "suicidal", "overdose"
+        "fall",
+        "dizziness",
+        "fainting",
+        "medication",
+        "blood thinner",
+        "pregnant",
+        "chest pain",
+        "severe",
+        "confusion",
+        "emergency",
+        "interaction",
+        "allergy",
+        "shortness of breath",
+        "suicidal",
+        "overdose",
     ]
-    flags = []
-    text = intake_text.lower() if intake_text else ""
-    for word in keywords:
-        if word in text:
-            flags.append(word)
-    return list(set(flags))
+    lowered = intake_text.lower() if intake_text else ""
+    return sorted({keyword for keyword in keywords if keyword in lowered})
 
-def build_system_prompt(practitioner, tone, client_age, client_goals, current_meds, relevant_concerns, flags, intake_text):
-    # Determine terminology for professional-facing note
+
+def list_saved_outputs() -> list[Path]:
+    files = list(OUTPUTS_DIR.rglob("*.md")) if OUTPUTS_DIR.exists() else []
+    return sorted(files, reverse=True)
+
+
+def get_openai_client() -> OpenAI | None:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        st.error("OPENAI_API_KEY environment variable not set. Please set it in your environment or .env file.")
+        return None
+    return OpenAI(api_key=api_key)
+
+
+def build_system_prompt(
+    practitioner: str,
+    tone: str,
+    client_age: str,
+    client_goals: str,
+    current_meds: str,
+    relevant_concerns: str,
+    flags: list[str],
+    intake_text: str,
+) -> str:
     if practitioner in ["Pharmacist", "Nurse", "General Medical Reviewer"]:
         prof_term = "patient"
     elif practitioner == "Wellness Consultant":
@@ -159,125 +179,382 @@ def build_system_prompt(practitioner, tone, client_age, client_goals, current_me
     else:
         prof_term = "individual"
 
-    # Section instructions
-    prompt = f"""
-You are an expert {practitioner} assistant. Your job is to convert intake responses into a structured review note, highlight key points, draft a summary for the individual, suggest next steps, and flag any concerns for human review.
+    return f"""
+You are an expert {practitioner} assistant. Convert the intake into a safe draft for human review.
 
-Always follow these rules:
+Rules:
 - Draft only. Human review required before use.
-- Do NOT diagnose or make final treatment decisions.
-- Do NOT make medication, supplement, or interaction claims unless clearly supported by the intake text.
+- No diagnosis.
+- No final treatment decisions.
+- No medication, supplement, or interaction claims unless clearly supported by the intake text.
 - Escalate higher-risk concerns, including fall risk, severe symptoms, medication complexity, incomplete information, or unclear safety concerns.
-- Adapt note framing and terminology to the selected practitioner type. Use "{prof_term}" for professional-facing sections. For individual-facing sections, use second-person language ("you").
-- Use professional, natural, and supportive language.
+- Use professional, natural language.
+- Use \"{prof_term}\" in the professional-facing note.
+- Use second-person language (\"you\") in the individual-facing summary.
 
 Generate exactly these sections:
-1. Structured Review Note (professional-facing, concise, organized, uses "{prof_term}", no diagnosis or final treatment decisions)
-2. Key Intake Highlights (bullet-style summary of important intake details)
-3. Individual-Facing Summary (plain language, written directly to the individual using "you", supportive, no jargon)
-4. Suggested Next Steps (general, safe, draft recommendations only, no prescriptions, no autonomous treatment decisions)
-5. Flagged Concerns (list detected risks or safety concerns clearly)
-6. Review Status (must be one of: Standard Human Review, Mandatory Human Review)
+1. Structured Review Note
+2. Key Intake Highlights
+3. Individual-Facing Summary
+4. Suggested Next Steps
+5. Flagged Concerns
+6. Review Status
 
-Practitioner type: {practitioner}
-Preferred tone: {tone}
-{prof_term.capitalize()} age: {client_age or 'Not provided'}
-Goals or main concern: {client_goals or 'Not provided'}
-Current medications/supplements: {current_meds or 'Not provided'}
-Relevant concerns/safety flags: {relevant_concerns or 'None'}
-Detected safety flags: {', '.join(flags) if flags else 'None'}
+Review Status must be exactly one of:
+- Standard Human Review
+- Mandatory Human Review
 
-Intake responses:
-"""
-    prompt += intake_text.strip() if intake_text else ""
-    prompt += """
+Practitioner Type: {practitioner}
+Preferred Tone: {tone}
+Age: {client_age or 'Not provided'}
+Goals or Main Concern: {client_goals or 'Not provided'}
+Current Medications or Supplements: {current_meds or 'Not provided'}
+Relevant Safety Concerns: {relevant_concerns or 'None provided'}
+Detected Safety Flags: {', '.join(flags) if flags else 'None'}
 
-If any detected safety flags are present, set Review Status to Mandatory Human Review and clearly highlight the concern(s).
-"""
-    return prompt
+Intake Responses:
+{intake_text.strip()}
 
-def get_openai_client():
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        st.error("OPENAI_API_KEY environment variable not set. Please set it in your environment or .env file.")
-        return None
-    return OpenAI(api_key=api_key)
+If any detected safety flags are present, set Review Status to Mandatory Human Review.
+""".strip()
 
-def call_llm(prompt):
+
+def call_llm(prompt: str) -> tuple[str | None, str | None]:
     client = get_openai_client()
     if not client:
         return None, "Missing API key."
-    try:
-        # Use the OpenAI Responses API pattern for safer integration
-        response = client.responses.create(
-            model=MODEL_NAME,
-            prompt=prompt,
-            max_tokens=1200,
-            temperature=0.3
-        )
-        return response.output_text, None
-    except Exception as e:
-        # If model access fails, gpt-4o-mini may be used as a fallback (see MODEL_NAME comment)
-        return None, f"OpenAI API error: {e}"
 
-allow_pid_ui = st.sidebar.checkbox("Allow identifiers (advanced / testing only)", value=False)
-global ALLOW_PID
-ALLOW_PID = allow_pid_ui
-if allow_pid_ui:
-    st.sidebar.error("Identifier handling enabled. Do NOT use real patient data. This mode is for controlled testing only.")
+    try:
+        response = client.responses.create(model=MODEL_NAME, input=prompt)
+        return response.output_text, None
+    except Exception as exc:
+        return None, f"OpenAI API error: {exc}"
+
+
+def save_output_local(
+    practitioner_type: str,
+    intake_text: str,
+    detected_flags: list[str],
+    generated_output: str,
+    reviewer_comments: str,
+    review_status: str,
+    confidence: str,
+) -> Path:
+    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    file_path = OUTPUTS_DIR / f"review_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+    content = f"""# Intake-to-Note Assistant Output
+
+## Metadata
+- Saved At: {datetime.now().isoformat(timespec='seconds')}
+- Practitioner Type: {practitioner_type}
+- Review Status: {review_status}
+
+## Intake Text (Sanitized)
+{intake_text}
+
+## Detected Flags
+{', '.join(detected_flags) if detected_flags else 'None'}
+
+## Generated Output (Sanitized)
+{generated_output}
+
+## Reviewer Comments
+{reviewer_comments or 'None'}
+
+## Sanitization Confidence
+{confidence}
+
+## Reminder
+Draft only. Requires human review before use.
+"""
+    file_path.write_text(content, encoding="utf-8")
+    return file_path
+
+
+def save_output_cloud(
+    practitioner_type: str,
+    intake_text: str,
+    detected_flags: list[str],
+    generated_output: str,
+    reviewer_comments: str,
+    review_status: str,
+    confidence: str,
+) -> None:
+    _ = (
+        practitioner_type,
+        intake_text,
+        detected_flags,
+        generated_output,
+        reviewer_comments,
+        review_status,
+        confidence,
+    )
+    # Placeholder for future cloud storage. Only sanitized data may be passed here.
+
+
+def save_output(
+    practitioner_type: str,
+    intake_text: str,
+    detected_flags: list[str],
+    generated_output: str,
+    reviewer_comments: str,
+    review_status: str,
+    confidence: str,
+) -> Path:
+    local_path = save_output_local(
+        practitioner_type=practitioner_type,
+        intake_text=intake_text,
+        detected_flags=detected_flags,
+        generated_output=generated_output,
+        reviewer_comments=reviewer_comments,
+        review_status=review_status,
+        confidence=confidence,
+    )
+    save_output_cloud(
+        practitioner_type=practitioner_type,
+        intake_text=intake_text,
+        detected_flags=detected_flags,
+        generated_output=generated_output,
+        reviewer_comments=reviewer_comments,
+        review_status=review_status,
+        confidence=confidence,
+    )
+    return local_path
+
+
+initialize_usage()
+if not st.session_state["run_incremented"]:
+    increment_runs()
+    st.session_state["run_incremented"] = True
+
+st.title("Intake-to-Note Assistant")
+st.write(
+    "Converts intake responses into a structured review note, draft follow-up, and flagged concerns for human review."
+)
+
+usage = get_usage()
+
+with st.sidebar:
+    st.header("Privacy and Safety Notes")
+    st.markdown(
+        """
+        - Use synthetic or non-identifying data for testing
+        - **Do not enter real patient-identifying information**
+        - Outputs are drafts and require human review
+        - High-risk cases should not be handled automatically
+        - This app is not intended for diagnosis or autonomous treatment decisions
+        """
+    )
+
+    st.subheader("Privacy Controls")
+    admin_key = st.text_input("Admin Key", type="password")
+    if admin_key == "admin123":
+        st.session_state["ALLOW_PID"] = st.checkbox(
+            "Allow identifiers (admin only)",
+            value=st.session_state["ALLOW_PID"],
+        )
+    else:
+        st.session_state["ALLOW_PID"] = False
+        st.caption("Enter the admin key to enable identifier passthrough for controlled testing.")
+
+    allow_pid = st.session_state["ALLOW_PID"]
+    if allow_pid:
+        st.error(
+            "Identifier handling ENABLED.\n\n"
+            "Do NOT use real patient data.\n"
+            "This mode is for controlled testing only."
+        )
+    else:
+        st.success("Identifier protection active")
+    st.caption(
+        f"Identifier Protection: {'OFF (Identifiers Allowed)' if allow_pid else 'ON (Identifiers Masked)'}"
+    )
+
+    st.subheader("Usage Dashboard")
+    st.metric("Total App Runs", usage["total_runs"])
+    st.metric("Reviews Submitted", usage["total_reviews_submitted"])
+    st.info(f"Join the test group — {usage['total_reviews_submitted']} reviews completed so far.")
 
 st.warning("All identifiers are automatically removed and replaced with placeholders unless explicitly enabled.")
+st.warning("All outputs must be reviewed. Identifier sanitization is not guaranteed to be perfect.")
+st.info(
+    "All saved outputs are automatically sanitized. Identifiers are never stored, even if visible during interaction."
+)
+
+practitioner = st.selectbox(
+    "Practitioner Type",
+    [
+        "Pharmacist",
+        "Nurse",
+        "Wellness Consultant",
+        "Occupational Therapist",
+        "General Medical Reviewer",
+    ],
+)
+intake_text = st.text_area("Paste Intake Form Responses", height=220)
+
+col1, col2 = st.columns(2)
+with col1:
+    client_age = st.text_input("Client Age (optional)")
+    client_goals = st.text_input("Goals or Main Concern (optional)")
+with col2:
+    current_meds = st.text_input("Current Medications or Supplements (optional)")
+    relevant_concerns = st.text_input("Relevant Safety Concerns (optional)")
+
+tone = st.selectbox("Preferred Tone", ["Gentle", "Direct", "Professional"], index=2)
 
 if st.button("Generate Draft"):
-    if not intake_text.strip():
+    raw_input = intake_text.strip()
+    if not raw_input:
         st.warning("Please enter intake form responses.")
     else:
-        sanitized_input = sanitize_identifiers(intake_text)
-        flags = detect_flags(sanitized_input)
-        if flags:
+        model_input = sanitize_identifiers(raw_input)
+        detected_flags = detect_flags(model_input)
+
+        if detected_flags:
             st.error("Potential safety flags detected. Mandatory human review recommended.")
         else:
             st.info("No automatic safety flags detected. Standard human review still required.")
-        st.info("Draft only. Requires human review before use.")
-        if flags:
-            st.write(f"**Detected Flags:** {', '.join(flags)}")
+
         prompt = build_system_prompt(
-            practitioner, tone, client_age, client_goals, current_meds, relevant_concerns, flags, sanitized_input
+            practitioner=practitioner,
+            tone=tone,
+            client_age=client_age,
+            client_goals=client_goals,
+            current_meds=current_meds,
+            relevant_concerns=relevant_concerns,
+            flags=detected_flags,
+            intake_text=model_input,
         )
+
         with st.spinner("Generating draft..."):
-            output, err = call_llm(prompt)
-        if err:
-            st.error(err)
-        elif output:
-            # Sanitize model output for identifiers
-            sanitized_output = sanitize_identifiers(output)
-            confidence = sanitization_confidence_check(sanitized_output)
-            st.markdown(sanitized_output)
-            st.subheader("Sanitization Confidence")
-            if confidence == "HIGH":
-                st.success("High confidence: identifiers likely removed")
-            elif confidence == "MEDIUM":
-                st.warning("Medium confidence: review for possible missed identifiers")
-            else:
-                st.error("Low confidence: potential identifiers remain, manual review required")
+            generated_output, error_message = call_llm(prompt)
+
+        if error_message:
+            st.error(error_message)
+        elif generated_output:
+            interactive_output = sanitize_identifiers(generated_output)
+            final_sanitized_input = sanitize_for_storage(raw_input)
+            final_sanitized_output = sanitize_for_storage(generated_output)
+            qc_input = qc_sanitization_check(final_sanitized_input)
+            qc_output = qc_sanitization_check(final_sanitized_output)
+
+            st.session_state["draft_data"] = {
+                "practitioner": practitioner,
+                "raw_input": raw_input,
+                "detected_flags": detected_flags,
+                "raw_output": generated_output,
+                "interactive_output": interactive_output,
+                "final_sanitized_input": final_sanitized_input,
+                "final_sanitized_output": final_sanitized_output,
+                "qc_input": qc_input,
+                "qc_output": qc_output,
+                "confidence": qc_output["confidence"],
+            }
         else:
             st.error("No output generated.")
-    st.warning("All outputs must be reviewed. Identifier sanitization is not guaranteed to be perfect.")
+
+draft_data = st.session_state.get("draft_data")
+
+if draft_data:
+    st.subheader("Generated Draft")
+    st.markdown(draft_data["interactive_output"])
+
+    st.subheader("Detected Flags")
+    if draft_data["detected_flags"]:
+        st.write(", ".join(draft_data["detected_flags"]))
+    else:
+        st.write("None")
+
+    qc_input = draft_data["qc_input"]
+    qc_output = draft_data["qc_output"]
+    qc_safe = qc_input["safe"] and qc_output["safe"]
+    confidence = draft_data["confidence"]
+
+    st.subheader("Sanitization Confidence")
+    if confidence == "HIGH":
+        st.success("High confidence: identifiers likely removed")
+    elif confidence == "MEDIUM":
+        st.warning("Medium confidence: review for possible missed identifiers")
+    else:
+        st.error("Low confidence: potential identifiers remain, manual review required")
+
+    st.subheader("Sanitization QC Check")
+    if qc_safe:
+        st.success("QC Passed: No identifiers detected")
+    else:
+        st.error("QC Failed: Potential identifiers remain")
+        st.write("Issues detected:")
+        st.write(qc_input["issues"] + qc_output["issues"])
+
+    review_status_default = (
+        "Mandatory Human Review"
+        if draft_data["detected_flags"]
+        else "Standard Human Review"
+    )
+    review_status = st.selectbox(
+        "Review Status",
+        ["Standard Human Review", "Mandatory Human Review"],
+        index=0 if review_status_default == "Standard Human Review" else 1,
+        key="review_status_select",
+    )
+    reviewer_comments = st.text_area("Reviewer Comments", key="reviewer_comments")
+
+    save_blocked = False
+    confirm_pid = True
+    if st.session_state["ALLOW_PID"]:
+        confirm_pid = st.checkbox(
+            "Confirm identifiers will NOT be stored",
+            value=False,
+            key="confirm_pid_checkbox",
+        )
+        if not confirm_pid:
+            st.warning("Please confirm before saving.")
+
+    if st.button("Submit Review and Save"):
+        final_sanitized_input = sanitize_for_storage(draft_data["raw_input"])
+        final_sanitized_output = sanitize_for_storage(draft_data["raw_output"])
+        qc_input = qc_sanitization_check(final_sanitized_input)
+        qc_output = qc_sanitization_check(final_sanitized_output)
+        qc_safe = qc_input["safe"] and qc_output["safe"]
+
+        if not qc_safe:
+            st.error("Sanitization QC failed.")
+            st.write("Issues detected:")
+            st.write(qc_input["issues"] + qc_output["issues"])
+            save_blocked = True
+
+        if st.session_state["ALLOW_PID"] and not confirm_pid:
+            save_blocked = True
+
+        final_sanitized_input = sanitize_for_storage(final_sanitized_input)
+        final_sanitized_output = sanitize_for_storage(final_sanitized_output)
+
+        if not save_blocked:
+            saved_path = save_output(
+                practitioner_type=draft_data["practitioner"],
+                intake_text=final_sanitized_input,
+                detected_flags=draft_data["detected_flags"],
+                generated_output=final_sanitized_output,
+                reviewer_comments=reviewer_comments,
+                review_status=review_status,
+                confidence=qc_output["confidence"],
+            )
+            increment_reviews()
+            st.success(f"Output saved successfully (sanitized): {saved_path.name}")
+        else:
+            st.warning("Save blocked due to safety checks.")
 
 st.subheader("Saved Outputs Dashboard")
-files = list_saved_outputs()
+try:
+    files = list_saved_outputs()
+except Exception:
+    files = []
+
 if not files:
     st.info("No saved outputs yet.")
 else:
-    selected_file = st.selectbox(
-        "Select an output to view",
-        [f.name for f in files]
-    )
-    selected_path = next(f for f in files if f.name == selected_file)
+    selected_file = st.selectbox("Select an output to view", [file.name for file in files])
+    selected_path = next(file for file in files if file.name == selected_file)
     content = selected_path.read_text(encoding="utf-8")
-    st.text_area("Output Content", content, height=300)
-
-def list_saved_outputs():
-    outputs_dir = BASE_DIR / "outputs"
-    files = list(outputs_dir.rglob("*.md")) if outputs_dir.exists() else []
-    return sorted(files, reverse=True)
+    st.text_area("Output Content", content, height=320)

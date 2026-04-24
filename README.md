@@ -1,6 +1,6 @@
 # Intake-to-Note Assistant
 
-**Current Status:** Version 1.1
+**Current Status:** Version 1.3
 
 This Streamlit app converts intake responses into a structured review note, draft follow-up, and flagged concerns for human review. It supports multiple practitioner types and preserves human review boundaries.
 
@@ -25,6 +25,14 @@ This Streamlit app converts intake responses into a structured review note, draf
 - Added dashboard to view saved outputs
 - Introduced simple engagement metric to track adoption
 - Designed for local testing, compatible with future cloud expansion
+
+## Version 1.3 Controlled PID and QC
+
+- Added admin-gated PID visibility during interaction
+- Enforced sanitization before model input when protection is on and before every save in all cases
+- Added a QC loop that checks both sanitized input and sanitized output before saving
+- Prevents storage when sanitization checks fail or PID confirmation is missing
+- Keeps saved outputs sanitized even when identifiers are visible during interaction
 
 ## Sanitization Confidence
 
@@ -71,3 +79,18 @@ See `project_plan.md` for design details and `eval_set.md` for test cases.
   - total app runs
   - total reviews submitted
 - Metrics are stored locally in usage.json and not committed to Git
+
+## PID Toggle (Session-Based)
+
+- Identifier handling is controlled via a sidebar toggle
+- Default behavior masks all identifiers
+- Toggle uses Streamlit session state for persistence
+- No global variables are used
+- Designed for safe testing and future extensibility
+
+## Storage Safety
+
+- Raw identifiers are never written to disk
+- Saved files contain sanitized intake text and sanitized generated output only
+- QC validation runs before save and blocks unsafe saves
+- Manual review is required for every saved output
