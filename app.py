@@ -1,11 +1,101 @@
 # API key is loaded from .env for local development
 # Do not hardcode secrets
 
-# Version 1.1: Safer model integration, privacy controls, encryption-ready structure
+# Version 1.2.1: Identifier protection, placeholder replacement, PID handling switch
 import os
 import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
+import re
+from pathlib import Path
+import json
+
+# When False, all identifiers are removed and replaced with placeholders
+# When True (future use), identifiers may be retained under controlled conditions
+ALLOW_PID = False
+
+BASE_DIR = Path(__file__).resolve().parent
+USAGE_FILE = BASE_DIR / "usage.json"
+
+def initialize_usage():
+    if not USAGE_FILE.exists():
+        data = {
+            "total_runs": 0,
+            "total_reviews_submitted": 0
+        }
+        USAGE_FILE.write_text(json.dumps(data, indent=2))
+
+initialize_usage()
+
+def increment_runs():
+    if "run_incremented" not in st.session_state:
+        st.session_state["run_incremented"] = True
+    data = json.loads(USAGE_FILE.read_text())
+    data["total_runs"] += 1
+    USAGE_FILE.write_text(json.dumps(data, indent=2))
+
+def increment_reviews():
+    data = json.loads(USAGE_FILE.read_text())
+    data["total_reviews_submitted"] += 1
+    USAGE_FILE.write_text(json.dumps(data, indent=2))
+
+def get_usage():
+    return json.loads(USAGE_FILE.read_text())
+
+def sanitize_identifiers(text: str) -> str:
+    if ALLOW_PID:
+        return text
+    # Emails
+    text = re.sub(r"\b[\w\.-]+@[\w\.-]+\.\w+\b", "[EMAIL]", text)
+    # Phone numbers
+    text = re.sub(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b", "[PHONE]", text)
+    # DOB
+    text = re.sub(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b", "[DOB]", text)
+    # SSN
+    text = re.sub(r"\b\d{3}-\d{2}-\d{4}\b", "[SSN]", text)
+    # ZIP codes
+    text = re.sub(r"\b\d{5}(?:-\d{4})?\b", "[ZIP]", text)
+    # Addresses (simple heuristic: number + street name)
+    text = re.sub(
+        r"\b\d{1,5}\s+[A-Za-z0-9\s]+\s(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Drive|Dr|Court|Ct|Boulevard|Blvd)\b",
+        "[ADDRESS]",
+        text,
+        flags=re.IGNORECASE
+    )
+    # Named label patterns
+    text = re.sub(r"(Name:\s*)([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)", r"\1[NAME]", text)
+    # Likely full names
+    text = re.sub(r"\b([A-Z][a-z]{2,}\s[A-Z][a-z]{2,})\b", "[NAME]", text)
+    # Long numeric IDs
+    text = re.sub(r"\b\d{4,}\b", "[ID]", text)
+    return text
+
+def sanitization_confidence_check(text: str) -> str:
+    """
+    Returns:
+    - HIGH: likely no identifiers remaining
+    - MEDIUM: possible identifiers remain
+    - LOW: strong indication identifiers remain
+    """
+    # Suspicious patterns (capitalized words not replaced)
+    possible_names = re.findall(r"\b[A-Z][a-z]{2,}\b", text)
+    # Suspicious long numbers
+    possible_ids = re.findall(r"\b\d{4,}\b", text)
+    # If still raw email-like patterns
+    possible_email = re.search(r"@", text)
+    score = 0
+    if len(possible_names) > 5:
+        score += 1
+    if len(possible_ids) > 0:
+        score += 1
+    if possible_email:
+        score += 2
+    if score >= 2:
+        return "LOW"
+    elif score == 1:
+        return "MEDIUM"
+    else:
+        return "HIGH"
 
 load_dotenv()
 
@@ -130,11 +220,20 @@ def call_llm(prompt):
         # If model access fails, gpt-4o-mini may be used as a fallback (see MODEL_NAME comment)
         return None, f"OpenAI API error: {e}"
 
+allow_pid_ui = st.sidebar.checkbox("Allow identifiers (advanced / testing only)", value=False)
+global ALLOW_PID
+ALLOW_PID = allow_pid_ui
+if allow_pid_ui:
+    st.sidebar.error("Identifier handling enabled. Do NOT use real patient data. This mode is for controlled testing only.")
+
+st.warning("All identifiers are automatically removed and replaced with placeholders unless explicitly enabled.")
+
 if st.button("Generate Draft"):
     if not intake_text.strip():
         st.warning("Please enter intake form responses.")
     else:
-        flags = detect_flags(intake_text)
+        sanitized_input = sanitize_identifiers(intake_text)
+        flags = detect_flags(sanitized_input)
         if flags:
             st.error("Potential safety flags detected. Mandatory human review recommended.")
         else:
@@ -143,13 +242,42 @@ if st.button("Generate Draft"):
         if flags:
             st.write(f"**Detected Flags:** {', '.join(flags)}")
         prompt = build_system_prompt(
-            practitioner, tone, client_age, client_goals, current_meds, relevant_concerns, flags, intake_text
+            practitioner, tone, client_age, client_goals, current_meds, relevant_concerns, flags, sanitized_input
         )
         with st.spinner("Generating draft..."):
             output, err = call_llm(prompt)
         if err:
             st.error(err)
         elif output:
-            st.markdown(output)
+            # Sanitize model output for identifiers
+            sanitized_output = sanitize_identifiers(output)
+            confidence = sanitization_confidence_check(sanitized_output)
+            st.markdown(sanitized_output)
+            st.subheader("Sanitization Confidence")
+            if confidence == "HIGH":
+                st.success("High confidence: identifiers likely removed")
+            elif confidence == "MEDIUM":
+                st.warning("Medium confidence: review for possible missed identifiers")
+            else:
+                st.error("Low confidence: potential identifiers remain, manual review required")
         else:
             st.error("No output generated.")
+    st.warning("All outputs must be reviewed. Identifier sanitization is not guaranteed to be perfect.")
+
+st.subheader("Saved Outputs Dashboard")
+files = list_saved_outputs()
+if not files:
+    st.info("No saved outputs yet.")
+else:
+    selected_file = st.selectbox(
+        "Select an output to view",
+        [f.name for f in files]
+    )
+    selected_path = next(f for f in files if f.name == selected_file)
+    content = selected_path.read_text(encoding="utf-8")
+    st.text_area("Output Content", content, height=300)
+
+def list_saved_outputs():
+    outputs_dir = BASE_DIR / "outputs"
+    files = list(outputs_dir.rglob("*.md")) if outputs_dir.exists() else []
+    return sorted(files, reverse=True)
