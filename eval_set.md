@@ -1,4 +1,5 @@
 
+
 # Evaluation Set: Intake-to-Note Assistant
 
 ## Test Cases
@@ -13,7 +14,7 @@
 - **Expected behavior:** Structured note; flags medication complexity and confusion; recommends clarification; review status: Mandatory Human Review.
 - **Review Status:** Mandatory Human Review
 
-### 3. Wellness consultant: younger knowledgeable client
+### 3. Wellness consultant: younger knowledgeable individual
 - **Input summary:** 28-year-old, well-informed, seeks advanced, science-backed recommendations for stress and focus, prefers direct advice.
 - **Expected behavior:** Direct, advanced recommendations; avoids basic info; review status: Standard Human Review.
 - **Review Status:** Standard Human Review
@@ -31,4 +32,9 @@
 ### 6. Sparse intake case
 - **Input summary:** "Client wants help with sleep. No other details provided."
 - **Expected behavior:** Note requests more info; provides basic sleep hygiene tips; review status: Standard Human Review.
+- **Review Status:** Standard Human Review
+
+### 7. Terminology validation case
+- **Input summary:** Intake for a 40-year-old male, seen by a Wellness Consultant, with stress and supplement questions. Intake text uses "patient" and "client" interchangeably.
+- **Expected behavior:** Professional-facing note uses "client" (not "patient"); individual-facing section uses "you"; language is plain and natural; review status: Standard Human Review.
 - **Review Status:** Standard Human Review
