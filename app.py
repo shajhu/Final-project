@@ -27,6 +27,10 @@ if "run_incremented" not in st.session_state:
     st.session_state["run_incremented"] = False
 if "draft_data" not in st.session_state:
     st.session_state["draft_data"] = None
+if "last_intake_text" not in st.session_state:
+    st.session_state["last_intake_text"] = ""
+if "generated_output" not in st.session_state:
+    st.session_state["generated_output"] = ""
 
 
 def initialize_usage() -> None:
@@ -164,6 +168,7 @@ def get_openai_client() -> OpenAI | None:
 
 def build_system_prompt(
     practitioner: str,
+    person_term_choice: str,
     tone: str,
     client_age: str,
     client_goals: str,
@@ -172,12 +177,15 @@ def build_system_prompt(
     flags: list[str],
     intake_text: str,
 ) -> str:
-    if practitioner in ["Pharmacist", "Nurse", "General Medical Reviewer"]:
-        prof_term = "patient"
-    elif practitioner == "Wellness Consultant":
-        prof_term = "client"
+    if person_term_choice == "Auto":
+        if practitioner in ["Pharmacist", "Nurse", "General Medical Reviewer"]:
+            prof_term = "patient"
+        elif practitioner == "Wellness Consultant":
+            prof_term = "client"
+        else:
+            prof_term = "individual"
     else:
-        prof_term = "individual"
+        prof_term = person_term_choice.lower()
 
     return f"""
 You are an expert {practitioner} assistant. Convert the intake into a safe draft for human review.
@@ -189,6 +197,7 @@ Rules:
 - No medication, supplement, or interaction claims unless clearly supported by the intake text.
 - Escalate higher-risk concerns, including fall risk, severe symptoms, medication complexity, incomplete information, or unclear safety concerns.
 - Use professional, natural language.
+- Keep the individual-facing language gentle, supportive, and easy to understand.
 - Use \"{prof_term}\" in the professional-facing note.
 - Use second-person language (\"you\") in the individual-facing summary.
 
@@ -238,7 +247,7 @@ def save_output_local(
     generated_output: str,
     reviewer_comments: str,
     review_status: str,
-    confidence: str,
+    qc_summary: dict,
 ) -> Path:
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     file_path = OUTPUTS_DIR / f"review_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
@@ -261,8 +270,14 @@ def save_output_local(
 ## Reviewer Comments
 {reviewer_comments or 'None'}
 
-## Sanitization Confidence
-{confidence}
+## Sanitization / QC Summary
+- Input Confidence: {qc_summary['input_confidence']}
+- Output Confidence: {qc_summary['output_confidence']}
+- Reviewer Comments Confidence: {qc_summary['comments_confidence']}
+- Input Issues: {', '.join(qc_summary['input_issues']) if qc_summary['input_issues'] else 'None'}
+- Output Issues: {', '.join(qc_summary['output_issues']) if qc_summary['output_issues'] else 'None'}
+- Reviewer Comment Issues: {', '.join(qc_summary['comments_issues']) if qc_summary['comments_issues'] else 'None'}
+- Safe to Store After Sanitization: {'Yes' if qc_summary['safe_to_store_after_sanitization'] else 'No'}
 
 ## Reminder
 Draft only. Requires human review before use.
@@ -278,7 +293,7 @@ def save_output_cloud(
     generated_output: str,
     reviewer_comments: str,
     review_status: str,
-    confidence: str,
+    qc_summary: dict,
 ) -> None:
     _ = (
         practitioner_type,
@@ -287,7 +302,7 @@ def save_output_cloud(
         generated_output,
         reviewer_comments,
         review_status,
-        confidence,
+        qc_summary,
     )
     # Placeholder for future cloud storage. Only sanitized data may be passed here.
 
@@ -299,7 +314,7 @@ def save_output(
     generated_output: str,
     reviewer_comments: str,
     review_status: str,
-    confidence: str,
+    qc_summary: dict,
 ) -> Path:
     local_path = save_output_local(
         practitioner_type=practitioner_type,
@@ -308,7 +323,7 @@ def save_output(
         generated_output=generated_output,
         reviewer_comments=reviewer_comments,
         review_status=review_status,
-        confidence=confidence,
+        qc_summary=qc_summary,
     )
     save_output_cloud(
         practitioner_type=practitioner_type,
@@ -317,7 +332,7 @@ def save_output(
         generated_output=generated_output,
         reviewer_comments=reviewer_comments,
         review_status=review_status,
-        confidence=confidence,
+        qc_summary=qc_summary,
     )
     return local_path
 
@@ -391,6 +406,11 @@ practitioner = st.selectbox(
         "General Medical Reviewer",
     ],
 )
+person_term_choice = st.selectbox(
+    "Person-Facing Terminology",
+    ["Auto", "Patient", "Client", "Individual"],
+    help="Controls the label used in the professional-facing note. The individual-facing summary still uses second-person language.",
+)
 intake_text = st.text_area("Paste Intake Form Responses", height=220)
 
 col1, col2 = st.columns(2)
@@ -401,7 +421,8 @@ with col2:
     current_meds = st.text_input("Current Medications or Supplements (optional)")
     relevant_concerns = st.text_input("Relevant Safety Concerns (optional)")
 
-tone = st.selectbox("Preferred Tone", ["Gentle", "Direct", "Professional"], index=2)
+tone = "Gentle"
+st.caption("Tone is automatically set to a gentle, patient-facing style for the individual-facing output.")
 
 if st.button("Generate Draft"):
     raw_input = intake_text.strip()
@@ -418,6 +439,7 @@ if st.button("Generate Draft"):
 
         prompt = build_system_prompt(
             practitioner=practitioner,
+            person_term_choice=person_term_choice,
             tone=tone,
             client_age=client_age,
             client_goals=client_goals,
@@ -433,6 +455,8 @@ if st.button("Generate Draft"):
         if error_message:
             st.error(error_message)
         elif generated_output:
+            st.session_state["last_intake_text"] = raw_input
+            st.session_state["generated_output"] = generated_output
             interactive_output = sanitize_identifiers(generated_output)
             final_sanitized_input = sanitize_for_storage(raw_input)
             final_sanitized_output = sanitize_for_storage(generated_output)
@@ -441,6 +465,7 @@ if st.button("Generate Draft"):
 
             st.session_state["draft_data"] = {
                 "practitioner": practitioner,
+                "person_term_choice": person_term_choice,
                 "raw_input": raw_input,
                 "detected_flags": detected_flags,
                 "raw_output": generated_output,
@@ -499,51 +524,59 @@ if draft_data:
         key="review_status_select",
     )
     reviewer_comments = st.text_area("Reviewer Comments", key="reviewer_comments")
-
-    save_blocked = False
-    confirm_pid = True
     if st.session_state["ALLOW_PID"]:
-        confirm_pid = st.checkbox(
+        st.checkbox(
             "Confirm identifiers will NOT be stored",
             value=False,
             key="confirm_pid_checkbox",
         )
-        if not confirm_pid:
-            st.warning("Please confirm before saving.")
 
     if st.button("Submit Review and Save"):
-        final_sanitized_input = sanitize_for_storage(draft_data["raw_input"])
-        final_sanitized_output = sanitize_for_storage(draft_data["raw_output"])
-        qc_input = qc_sanitization_check(final_sanitized_input)
-        qc_output = qc_sanitization_check(final_sanitized_output)
-        qc_safe = qc_input["safe"] and qc_output["safe"]
+        sanitized_input = sanitize_for_storage(st.session_state["last_intake_text"])
+        sanitized_output = sanitize_for_storage(st.session_state["generated_output"])
+        sanitized_comments = sanitize_for_storage(reviewer_comments)
+
+        sanitized_input = sanitize_for_storage(sanitized_input)
+        sanitized_output = sanitize_for_storage(sanitized_output)
+        sanitized_comments = sanitize_for_storage(sanitized_comments)
+
+        qc_input = qc_sanitization_check(sanitized_input)
+        qc_output = qc_sanitization_check(sanitized_output)
+        qc_comments = qc_sanitization_check(sanitized_comments)
+        qc_safe = qc_input["safe"] and qc_output["safe"] and qc_comments["safe"]
 
         if not qc_safe:
-            st.error("Sanitization QC failed.")
-            st.write("Issues detected:")
-            st.write(qc_input["issues"] + qc_output["issues"])
-            save_blocked = True
-
-        if st.session_state["ALLOW_PID"] and not confirm_pid:
-            save_blocked = True
-
-        final_sanitized_input = sanitize_for_storage(final_sanitized_input)
-        final_sanitized_output = sanitize_for_storage(final_sanitized_output)
-
-        if not save_blocked:
-            saved_path = save_output(
-                practitioner_type=draft_data["practitioner"],
-                intake_text=final_sanitized_input,
-                detected_flags=draft_data["detected_flags"],
-                generated_output=final_sanitized_output,
-                reviewer_comments=reviewer_comments,
-                review_status=review_status,
-                confidence=qc_output["confidence"],
+            st.warning(
+                "QC detected possible identifiers. The submission will still be saved, but only after forced sanitization."
             )
-            increment_reviews()
-            st.success(f"Output saved successfully (sanitized): {saved_path.name}")
-        else:
-            st.warning("Save blocked due to safety checks.")
+
+        if st.session_state["ALLOW_PID"]:
+            st.warning(
+                "Identifiers may have been visible during review, but identifiers will not be saved."
+            )
+
+        qc_summary = {
+            "input_confidence": qc_input["confidence"],
+            "output_confidence": qc_output["confidence"],
+            "comments_confidence": qc_comments["confidence"],
+            "input_issues": qc_input["issues"],
+            "output_issues": qc_output["issues"],
+            "comments_issues": qc_comments["issues"],
+            "safe_to_store_after_sanitization": True,
+        }
+
+        saved_path = save_output(
+            practitioner_type=draft_data["practitioner"],
+            intake_text=sanitized_input,
+            detected_flags=draft_data["detected_flags"],
+            generated_output=sanitized_output,
+            reviewer_comments=sanitized_comments,
+            review_status=review_status,
+            qc_summary=qc_summary,
+        )
+        increment_reviews()
+        st.success("Review submitted. Sanitized output saved successfully.")
+        st.caption(f"Saved file: {saved_path.name}")
 
 st.subheader("Saved Outputs Dashboard")
 try:

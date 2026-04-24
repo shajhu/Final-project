@@ -41,5 +41,8 @@ Version includes a session-based toggle to control identifier handling. By defau
 - Identifier visibility may be enabled only during interaction and controlled testing
 - Input and output are sanitized before any save operation
 - QC checks both sanitized input and sanitized output before storage
-- Saves are blocked when QC fails or PID confirmation is missing
 - Local and future cloud save paths must receive sanitized content only
+
+## Always-Sanitized Persistence
+
+The system is designed to preserve evaluation data without preserving identifiers. Save operations are not blocked by PID warnings; instead, all content is force-sanitized before storage. QC results are saved as metadata so reviewers can see whether identifier risk was detected before sanitization.

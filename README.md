@@ -34,6 +34,14 @@ This Streamlit app converts intake responses into a structured review note, draf
 - Prevents storage when sanitization checks fail or PID confirmation is missing
 - Keeps saved outputs sanitized even when identifiers are visible during interaction
 
+## Version 1.3.1 Always-Sanitized Save
+
+- Review submissions now always save after forced sanitization
+- PID may be visible during controlled review but is not persisted
+- QC warnings are captured as metadata instead of blocking storage
+- Reviewer comments are also sanitized before saving
+- Improves evaluation data capture while preserving privacy safeguards
+
 ## Sanitization Confidence
 
 Each saved output includes a confidence level:
@@ -92,5 +100,6 @@ See `project_plan.md` for design details and `eval_set.md` for test cases.
 
 - Raw identifiers are never written to disk
 - Saved files contain sanitized intake text and sanitized generated output only
-- QC validation runs before save and blocks unsafe saves
+- Reviewer comments are sanitized before save
+- QC validation runs before save and is stored as metadata
 - Manual review is required for every saved output
