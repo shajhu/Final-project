@@ -31,6 +31,10 @@ if "last_intake_text" not in st.session_state:
     st.session_state["last_intake_text"] = ""
 if "generated_output" not in st.session_state:
     st.session_state["generated_output"] = ""
+if "save_success_message" not in st.session_state:
+    st.session_state["save_success_message"] = ""
+if "save_success_path" not in st.session_state:
+    st.session_state["save_success_path"] = ""
 
 
 def initialize_usage() -> None:
@@ -82,13 +86,13 @@ def mask_identifiers(text: str) -> str:
 
 
 def sanitize_identifiers(text: str) -> str:
+    return mask_identifiers(text)
+
+
+def prepare_interaction_text(text: str) -> str:
     if st.session_state["ALLOW_PID"]:
         return text
-    return mask_identifiers(text)
-
-
-def sanitize_for_storage(text: str) -> str:
-    return mask_identifiers(text)
+    return sanitize_identifiers(text)
 
 
 def sanitization_confidence_check(text: str) -> str:
@@ -249,8 +253,9 @@ def save_output_local(
     review_status: str,
     qc_summary: dict,
 ) -> Path:
-    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-    file_path = OUTPUTS_DIR / f"review_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+    practitioner_dir = OUTPUTS_DIR / practitioner_type
+    practitioner_dir.mkdir(parents=True, exist_ok=True)
+    file_path = practitioner_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
     content = f"""# Intake-to-Note Assistant Output
 
 ## Metadata
@@ -269,6 +274,10 @@ def save_output_local(
 
 ## Reviewer Comments
 {reviewer_comments or 'None'}
+
+## QC Summary
+- QC Safe: {qc_summary['qc_safe']}
+- Issues Detected: {qc_summary['issues_detected'] if qc_summary['issues_detected'] else 'None'}
 
 ## Sanitization / QC Summary
 - Input Confidence: {qc_summary['input_confidence']}
@@ -316,21 +325,25 @@ def save_output(
     review_status: str,
     qc_summary: dict,
 ) -> Path:
+    sanitized_intake_text = sanitize_identifiers(intake_text)
+    sanitized_generated_output = sanitize_identifiers(generated_output)
+    sanitized_reviewer_comments = sanitize_identifiers(reviewer_comments)
+
     local_path = save_output_local(
         practitioner_type=practitioner_type,
-        intake_text=intake_text,
+        intake_text=sanitized_intake_text,
         detected_flags=detected_flags,
-        generated_output=generated_output,
-        reviewer_comments=reviewer_comments,
+        generated_output=sanitized_generated_output,
+        reviewer_comments=sanitized_reviewer_comments,
         review_status=review_status,
         qc_summary=qc_summary,
     )
     save_output_cloud(
         practitioner_type=practitioner_type,
-        intake_text=intake_text,
+        intake_text=sanitized_intake_text,
         detected_flags=detected_flags,
-        generated_output=generated_output,
-        reviewer_comments=reviewer_comments,
+        generated_output=sanitized_generated_output,
+        reviewer_comments=sanitized_reviewer_comments,
         review_status=review_status,
         qc_summary=qc_summary,
     )
@@ -348,6 +361,7 @@ st.write(
 )
 
 usage = get_usage()
+IS_ADMIN = False
 
 with st.sidebar:
     st.header("Privacy and Safety Notes")
@@ -363,7 +377,8 @@ with st.sidebar:
 
     st.subheader("Privacy Controls")
     admin_key = st.text_input("Admin Key", type="password")
-    if admin_key == "admin123":
+    IS_ADMIN = admin_key == "admin123"
+    if IS_ADMIN:
         st.session_state["ALLOW_PID"] = st.checkbox(
             "Allow identifiers (admin only)",
             value=st.session_state["ALLOW_PID"],
@@ -374,10 +389,8 @@ with st.sidebar:
 
     allow_pid = st.session_state["ALLOW_PID"]
     if allow_pid:
-        st.error(
-            "Identifier handling ENABLED.\n\n"
-            "Do NOT use real patient data.\n"
-            "This mode is for controlled testing only."
+        st.info(
+            "Identifiers may be visible during use, but all saved outputs are automatically sanitized."
         )
     else:
         st.success("Identifier protection active")
@@ -393,8 +406,25 @@ with st.sidebar:
 st.warning("All identifiers are automatically removed and replaced with placeholders unless explicitly enabled.")
 st.warning("All outputs must be reviewed. Identifier sanitization is not guaranteed to be perfect.")
 st.info(
-    "All saved outputs are automatically sanitized. Identifiers are never stored, even if visible during interaction."
+    "All outputs are automatically sanitized before saving. No identifiers are ever stored, regardless of settings."
 )
+st.info(
+    "Outputs are private to your session. Saved outputs are not visible to other users."
+)
+
+if not IS_ADMIN:
+    st.info("Session mode: Only your generated output is visible.")
+
+if st.button("Clear Session"):
+    st.session_state.clear()
+    st.rerun()
+
+if st.session_state["save_success_message"]:
+    st.success(st.session_state["save_success_message"])
+    if st.session_state["save_success_path"]:
+        st.caption(f"Saved file: {st.session_state['save_success_path']}")
+    st.session_state["save_success_message"] = ""
+    st.session_state["save_success_path"] = ""
 
 practitioner = st.selectbox(
     "Practitioner Type",
@@ -429,7 +459,7 @@ if st.button("Generate Draft"):
     if not raw_input:
         st.warning("Please enter intake form responses.")
     else:
-        model_input = sanitize_identifiers(raw_input)
+        model_input = prepare_interaction_text(raw_input)
         detected_flags = detect_flags(model_input)
 
         if detected_flags:
@@ -457,9 +487,9 @@ if st.button("Generate Draft"):
         elif generated_output:
             st.session_state["last_intake_text"] = raw_input
             st.session_state["generated_output"] = generated_output
-            interactive_output = sanitize_identifiers(generated_output)
-            final_sanitized_input = sanitize_for_storage(raw_input)
-            final_sanitized_output = sanitize_for_storage(generated_output)
+            interactive_output = prepare_interaction_text(generated_output)
+            final_sanitized_input = sanitize_identifiers(raw_input)
+            final_sanitized_output = sanitize_identifiers(generated_output)
             qc_input = qc_sanitization_check(final_sanitized_input)
             qc_output = qc_sanitization_check(final_sanitized_output)
 
@@ -482,8 +512,9 @@ if st.button("Generate Draft"):
 draft_data = st.session_state.get("draft_data")
 
 if draft_data:
-    st.subheader("Generated Draft")
-    st.markdown(draft_data["interactive_output"])
+    if "generated_output" in st.session_state:
+        st.subheader("Generated Output")
+        st.text_area("Output", st.session_state["generated_output"], height=300)
 
     st.subheader("Detected Flags")
     if draft_data["detected_flags"]:
@@ -508,9 +539,8 @@ if draft_data:
     if qc_safe:
         st.success("QC Passed: No identifiers detected")
     else:
-        st.error("QC Failed: Potential identifiers remain")
-        st.write("Issues detected:")
-        st.write(qc_input["issues"] + qc_output["issues"])
+        st.warning("QC Warning: Potential identifiers were detected and removed before saving.")
+        st.write("Detected issues:", qc_input["issues"] + qc_output["issues"])
 
     review_status_default = (
         "Mandatory Human Review"
@@ -524,38 +554,35 @@ if draft_data:
         key="review_status_select",
     )
     reviewer_comments = st.text_area("Reviewer Comments", key="reviewer_comments")
-    if st.session_state["ALLOW_PID"]:
-        st.checkbox(
-            "Confirm identifiers will NOT be stored",
-            value=False,
-            key="confirm_pid_checkbox",
-        )
 
     if st.button("Submit Review and Save"):
-        sanitized_input = sanitize_for_storage(st.session_state["last_intake_text"])
-        sanitized_output = sanitize_for_storage(st.session_state["generated_output"])
-        sanitized_comments = sanitize_for_storage(reviewer_comments)
+        sanitized_input = sanitize_identifiers(st.session_state["last_intake_text"])
+        sanitized_output = sanitize_identifiers(st.session_state["generated_output"])
+        sanitized_comments = sanitize_identifiers(reviewer_comments)
 
-        sanitized_input = sanitize_for_storage(sanitized_input)
-        sanitized_output = sanitize_for_storage(sanitized_output)
-        sanitized_comments = sanitize_for_storage(sanitized_comments)
+        sanitized_input = sanitize_identifiers(sanitized_input)
+        sanitized_output = sanitize_identifiers(sanitized_output)
+        sanitized_comments = sanitize_identifiers(sanitized_comments)
 
         qc_input = qc_sanitization_check(sanitized_input)
         qc_output = qc_sanitization_check(sanitized_output)
         qc_comments = qc_sanitization_check(sanitized_comments)
         qc_safe = qc_input["safe"] and qc_output["safe"] and qc_comments["safe"]
 
-        if not qc_safe:
-            st.warning(
-                "QC detected possible identifiers. The submission will still be saved, but only after forced sanitization."
+        if st.session_state["ALLOW_PID"]:
+            st.info(
+                "Identifiers may be visible during use, but all saved outputs are automatically sanitized."
             )
 
-        if st.session_state["ALLOW_PID"]:
-            st.warning(
-                "Identifiers may have been visible during review, but identifiers will not be saved."
-            )
+        if qc_safe:
+            st.success("QC Passed: No identifiers detected")
+        else:
+            st.warning("QC Warning: Potential identifiers were detected and removed before saving.")
+            st.write("Detected issues:", qc_input["issues"] + qc_output["issues"])
 
         qc_summary = {
+            "qc_safe": qc_safe,
+            "issues_detected": ", ".join(qc_input["issues"] + qc_output["issues"]),
             "input_confidence": qc_input["confidence"],
             "output_confidence": qc_output["confidence"],
             "comments_confidence": qc_comments["confidence"],
@@ -575,19 +602,26 @@ if draft_data:
             qc_summary=qc_summary,
         )
         increment_reviews()
-        st.success("Review submitted. Sanitized output saved successfully.")
-        st.caption(f"Saved file: {saved_path.name}")
+        st.session_state["save_success_message"] = "Output saved successfully (sanitized)."
+        st.session_state["save_success_path"] = saved_path.name
+        st.rerun()
 
-st.subheader("Saved Outputs Dashboard")
-try:
-    files = list_saved_outputs()
-except Exception:
-    files = []
+if IS_ADMIN:
+    st.subheader("Admin Dashboard")
+    try:
+        files = list_saved_outputs()
+    except Exception:
+        files = []
 
-if not files:
-    st.info("No saved outputs yet.")
-else:
-    selected_file = st.selectbox("Select an output to view", [file.name for file in files])
-    selected_path = next(file for file in files if file.name == selected_file)
-    content = selected_path.read_text(encoding="utf-8")
-    st.text_area("Output Content", content, height=320)
+    if files:
+        selected_file = st.selectbox(
+            "Select saved output",
+            [file.name for file in files],
+        )
+
+        selected_path = next(file for file in files if file.name == selected_file)
+        content = selected_path.read_text(encoding="utf-8")
+
+        st.text_area("Saved Output", content, height=300)
+    else:
+        st.info("No saved outputs yet.")

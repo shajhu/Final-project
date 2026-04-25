@@ -1,6 +1,6 @@
 # Intake-to-Note Assistant
 
-**Current Status:** Version 1.3
+**Current Status:** Version 1.3.2
 
 This Streamlit app converts intake responses into a structured review note, draft follow-up, and flagged concerns for human review. It supports multiple practitioner types and preserves human review boundaries.
 
@@ -31,7 +31,7 @@ This Streamlit app converts intake responses into a structured review note, draf
 - Added admin-gated PID visibility during interaction
 - Enforced sanitization before model input when protection is on and before every save in all cases
 - Added a QC loop that checks both sanitized input and sanitized output before saving
-- Prevents storage when sanitization checks fail or PID confirmation is missing
+- Surfaces QC findings to reviewers before save
 - Keeps saved outputs sanitized even when identifiers are visible during interaction
 
 ## Version 1.3.1 Always-Sanitized Save
@@ -41,6 +41,14 @@ This Streamlit app converts intake responses into a structured review note, draf
 - QC warnings are captured as metadata instead of blocking storage
 - Reviewer comments are also sanitized before saving
 - Improves evaluation data capture while preserving privacy safeguards
+
+## Version 1.3.2 Session-Isolated Visibility
+
+- Generated output is visible only within the current session
+- Historical saved outputs are hidden from general users
+- Admin mode can review all saved outputs through a protected dashboard
+- Saved outputs still persist locally for audit and review
+- Session reset support clears current-session data without exposing prior outputs
 
 ## Sanitization Confidence
 
@@ -75,6 +83,90 @@ pip install -r requirements.txt
 setx OPENAI_API_KEY "your_api_key_here"
 python -m streamlit run app.py
 ```
+
+## Restart / Run Instructions
+
+Use these steps when restarting the app for local testing or sharing through ngrok.
+
+### 1. Open the project folder
+
+Open the repository folder in VS Code:
+
+```powershell
+cd "C:\Users\shami\OneDrive\Documents\John Hopkins\Generative AI\Repository\Final Project"
+```
+
+### 2. Activate the virtual environment
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+.\.venv\Scripts\Activate.ps1
+```
+
+You should see `(.venv)` at the start of the terminal line.
+
+### 3. Start the Streamlit app
+
+```powershell
+python -m streamlit run app.py --server.port 8501
+```
+
+If port `8501` is already in use, either close old Python processes or use a different port:
+
+```powershell
+taskkill /F /IM python.exe
+python -m streamlit run app.py --server.port 8501
+```
+
+### 4. Open locally
+
+After the app starts, open the local URL shown by Streamlit, usually:
+
+```text
+http://localhost:8501
+```
+
+### 5. Share remotely with ngrok
+
+In a second terminal, run:
+
+```powershell
+ngrok http 8501
+```
+
+Copy the HTTPS forwarding link that ngrok provides, for example:
+
+```text
+https://example-name.ngrok-free.dev
+```
+
+Send that link to the tester.
+
+### 6. Keep the app running
+
+For remote testing, keep both terminals open:
+
+- Terminal 1: Streamlit app
+- Terminal 2: ngrok tunnel
+
+The shared link will stop working if either terminal is closed, the laptop sleeps, or the internet connection drops.
+
+### 7. Clean shutdown
+
+When testing is complete, close everything with:
+
+```powershell
+taskkill /F /IM python.exe
+taskkill /F /IM ngrok.exe
+```
+
+### Testing Notes
+
+- Use synthetic or non-identifying data only.
+- Do not enter real patient-identifying information.
+- Outputs are sanitized before saving.
+- Saved test outputs are stored locally in the `outputs/` folder.
+- The app is a prototype and all outputs require human review.
 
 **Note:** `.env` and `.streamlit/secrets.toml` should not be committed to version control.
 

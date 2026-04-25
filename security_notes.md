@@ -45,4 +45,11 @@ Version includes a session-based toggle to control identifier handling. By defau
 
 ## Always-Sanitized Persistence
 
-The system is designed to preserve evaluation data without preserving identifiers. Save operations are not blocked by PID warnings; instead, all content is force-sanitized before storage. QC results are saved as metadata so reviewers can see whether identifier risk was detected before sanitization.
+The system is designed to preserve evaluation data without preserving identifiers. Save operations are not blocked by PID warnings or QC findings; instead, all content is force-sanitized before storage. QC results are saved as metadata so reviewers can see whether identifier risk was detected before sanitization.
+
+## Version 1.3.2 Session Privacy
+
+- Generated output is scoped to the active Streamlit session only
+- Non-admin users cannot browse historical saved outputs in the UI
+- Admin-only dashboard access is protected by the existing admin key gate
+- Local file persistence remains enabled for review and audit purposes
