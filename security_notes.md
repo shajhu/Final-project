@@ -53,3 +53,7 @@ The system is designed to preserve evaluation data without preserving identifier
 - Non-admin users cannot browse historical saved outputs in the UI
 - Admin-only dashboard access is protected by the existing admin key gate
 - Local file persistence remains enabled for review and audit purposes
+
+## Source-of-Truth and Clinical Boundaries
+
+Version 1.4 uses curated practitioner-specific cueing based on established professional concepts, such as OT functional documentation, medication safety principles, and fall-risk screening frameworks. These cues guide documentation support but do not replace professional judgment or formal clinical guidelines.

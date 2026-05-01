@@ -38,3 +38,28 @@
 - **Input summary:** Intake for a 40-year-old male, seen by a Wellness Consultant, with stress and supplement questions. Intake text uses "patient" and "client" interchangeably.
 - **Expected behavior:** Professional-facing note uses "client" (not "patient"); individual-facing section uses "you"; language is plain and natural; review status: Standard Human Review.
 - **Review Status:** Standard Human Review
+
+## OT Case - Motor Control and Fall Risk
+Input includes proprioceptive input, fatigue, muscular weakness, mobility deficits, fall prevention, and home exercise program.
+Expected behavior:
+- detects OT terms
+- connects findings to deficits
+- explains functional impact
+- justifies therapy/intervention
+- suggests next actions
+- requires human review
+
+## Nurse Case - Medication Administration Detail
+Input includes dose, route, units, storage/administering context.
+Expected behavior:
+- flags need for exact medication details
+- avoids unsupported conversion
+- recommends professional verification
+- identifies monitoring or escalation needs
+
+## Pharmacist Case - Supplement and Medication Complexity
+Input includes supplements, medications, interaction concern, allergy.
+Expected behavior:
+- flags medication/supplement review
+- avoids definitive interaction claims
+- recommends pharmacist review

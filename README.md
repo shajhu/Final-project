@@ -1,8 +1,35 @@
 # Intake-to-Note Assistant
 
-**Current Status:** Version 1.3.2
+**Current Status:** Version 1.4.3
 
-This Streamlit app converts intake responses into a structured review note, draft follow-up, and flagged concerns for human review. It supports multiple practitioner types and preserves human review boundaries.
+This Streamlit app assists practitioner-specific documentation by identifying relevant concepts, highlighting gaps, and drafting reviewable assessment and follow-up language for human review. It supports multiple practitioner types and preserves human review boundaries.
+
+## Model Architecture
+
+The system uses a model adapter layer to allow future integration with multiple AI providers (e.g., OpenAI, Claude).
+
+Current state:
+- OpenAI only (active)
+- Other adapters are placeholders
+
+## Version 1.4.2 Targeted Evaluation Alignment
+
+- Improved trigger detection with lightweight semantic cue grouping
+- Tightened pharmacist prompt language to avoid overclaiming interaction risk
+- Updated OT auto terminology to default to patient
+- Added optional assignment-aligned output section format
+- Clarified system-added content labeling and cue count display
+
+## Version 1.4 Practitioner-Specific Assistant Upgrade
+
+- Transitioned from summary generation to practitioner-specific documentation assistance
+- Added trigger detection by practitioner type
+- Added documentation gap detection
+- Added OT-focused reasoning around findings, deficits, functional impact, justification, and intervention
+- Added nurse medication-safety documentation cues
+- Added pharmacist supplement/medication review cues
+- Added wellness consultant advisory boundaries
+- Maintains human review, sanitization, and safe storage controls
 
 ## Version 1.1 Security Update
 - Added environment-based API key handling
