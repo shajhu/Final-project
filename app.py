@@ -6,10 +6,12 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import streamlit as st
 from dotenv import load_dotenv
 
+from audit_layer import audit_clinical_note
 from model_adapter import ClaudeAdapter, OpenAIAdapter
 
 load_dotenv()
@@ -20,6 +22,42 @@ BASE_DIR = Path(__file__).resolve().parent
 OUTPUTS_DIR = BASE_DIR / "outputs"
 USAGE_FILE = BASE_DIR / "usage.json"
 USE_ASSIGNMENT_FORMAT = True
+APP_NAME = "DraftSafe™"
+APP_TAGLINE = "AI-Assisted Practitioner Documentation & Review"
+APP_SUBTITLE = "AI-assisted drafting, deterministic auditing, and human review support."
+COPYRIGHT_NOTICE = "© 2026 Shamir Dominique. All rights reserved."
+DRAFTSAFE_OWNERSHIP_NOTICE = (
+    "DraftSafe™ and its associated workflow concepts, interface structure, deterministic audit integration logic, "
+    "practitioner-assistive workflows, and supporting materials were independently developed by Shamir Dominique.\n\n"
+    "No portion of this repository, workflow, interface, exported outputs, or supporting implementation may be reproduced, redistributed, reverse engineered, or commercialized without explicit written permission from the author."
+)
+APP_FOOTER_LINES = [
+    "DraftSafe™ - AI-Assisted Practitioner Documentation & Review",
+    COPYRIGHT_NOTICE,
+    "Prototype system independently developed by Shamir Dominique for educational, workflow-support, research, and demonstration purposes.",
+    "This system does not replace licensed clinical judgment, medical advice, or professional review.",
+    "Unauthorized reproduction, redistribution, reverse engineering, or commercialization of this workflow, interface, audit structure, or supporting implementation without written permission is prohibited.",
+]
+SECTION_HEADER_ALLOWLIST = {
+    "Findings",
+    "Assessment",
+    "Deficits",
+    "Functional Impact",
+    "Justification",
+    "Intervention",
+    "Suggested Next Actions",
+    "Individual-Facing Summary",
+    "QC Review",
+    "Review Status",
+    "Clinical Note",
+    "Key Highlights",
+    "Next Steps",
+    "Flagged Concerns",
+    "Human Review",
+    "Standard Human Review",
+    "Mandatory Human Review",
+    "Attached Intake/Form Content",
+}
 
 PRACTITIONER_KNOWLEDGE_MAP = {
     "Occupational Therapist": {
@@ -219,7 +257,7 @@ PRACTITIONER_TRIGGER_GROUPS = {
     ],
 }
 
-st.set_page_config(page_title="Intake-to-Note Assistant", layout="centered")
+st.set_page_config(page_title=APP_NAME, layout="centered")
 
 # Session state used to persist PID toggle across Streamlit reruns
 if "ALLOW_PID" not in st.session_state:
@@ -236,21 +274,95 @@ if "save_success_message" not in st.session_state:
     st.session_state["save_success_message"] = ""
 if "save_success_path" not in st.session_state:
     st.session_state["save_success_path"] = ""
+if "save_incomplete_warning" not in st.session_state:
+    st.session_state["save_incomplete_warning"] = ""
+
+
+def default_usage_data() -> dict:
+    return {
+        "total_runs": 0,
+        "total_reviews_submitted": 0,
+        "audit_score_sum": 0.0,
+        "audit_score_count": 0,
+        "missing_section_counts": {},
+        "total_reviews": 0,
+        "total_score": 0.0,
+        "average_score": 0,
+        "audit_runs": 0,
+    }
+
+
+def safe_dashboard_value(value: Any, fallback: Any = "None") -> Any:
+    """
+    Prevent dashboard crashes from empty or invalid analytics values.
+    """
+    if value is None:
+        print("[Dashboard] Safe fallback applied for empty analytics state")
+        return fallback
+
+    if isinstance(value, dict) and not value:
+        print("[Dashboard] Safe fallback applied for empty analytics state")
+        return fallback
+
+    if isinstance(value, list) and not value:
+        print("[Dashboard] Safe fallback applied for empty analytics state")
+        return fallback
+
+    if isinstance(value, str) and value.strip() == "":
+        print("[Dashboard] Safe fallback applied for empty analytics state")
+        return fallback
+
+    return value
+
+
+def safe_average(total_score, total_reviews):
+    return total_score / total_reviews if total_reviews > 0 else 0
 
 
 def initialize_usage() -> None:
     if not USAGE_FILE.exists():
         USAGE_FILE.write_text(
-            json.dumps({"total_runs": 0, "total_reviews_submitted": 0}, indent=2),
+            json.dumps(default_usage_data(), indent=2),
             encoding="utf-8",
         )
+        return
+
+    try:
+        data = json.loads(USAGE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        data = default_usage_data()
+
+    changed = False
+    for key, value in default_usage_data().items():
+        if key not in data:
+            data[key] = value
+            changed = True
+
+    if changed:
+        USAGE_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def get_usage() -> dict:
     try:
-        return json.loads(USAGE_FILE.read_text(encoding="utf-8"))
+        data = json.loads(USAGE_FILE.read_text(encoding="utf-8"))
     except Exception:
-        return {"total_runs": 0, "total_reviews_submitted": 0}
+        return default_usage_data()
+
+    defaults = default_usage_data()
+    defaults.update(data)
+    if not isinstance(defaults.get("missing_section_counts"), dict):
+        defaults["missing_section_counts"] = {}
+    defaults["total_reviews"] = defaults.get(
+        "total_reviews",
+        defaults["total_reviews_submitted"],
+    )
+    defaults["total_score"] = defaults.get("total_score", defaults["audit_score_sum"])
+    defaults["audit_runs"] = defaults.get("audit_runs", defaults["audit_score_count"])
+    defaults["average_score"] = safe_average(
+        defaults.get("total_score", 0.0),
+        defaults.get("audit_runs", 0),
+    )
+    return defaults
 
 
 def increment_runs() -> None:
@@ -265,25 +377,70 @@ def increment_reviews() -> None:
     USAGE_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
+def update_audit_metrics(audit_result: dict | None) -> None:
+    if not audit_result or "error" in audit_result:
+        return
+
+    data = get_usage()
+    data["audit_score_sum"] += audit_result.get("completeness_score", 0.0)
+    data["audit_score_count"] += 1
+    data["total_score"] = data["audit_score_sum"]
+    data["audit_runs"] = data["audit_score_count"]
+    data["average_score"] = safe_average(data["total_score"], data["audit_runs"])
+
+    missing_counts = data.get("missing_section_counts", {})
+    for item in audit_result.get("missing", []):
+        missing_counts[item] = missing_counts.get(item, 0) + 1
+    data["missing_section_counts"] = missing_counts
+
+    USAGE_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
 def mask_identifiers(text: str) -> str:
     if not text:
         return ""
 
-    text = re.sub(r"\b[\w\.-]+@[\w\.-]+\.\w+\b", "[EMAIL]", text)
-    text = re.sub(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b", "[PHONE]", text)
-    text = re.sub(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b", "[DOB]", text)
-    text = re.sub(r"\b\d{3}-\d{2}-\d{4}\b", "[SSN]", text)
-    text = re.sub(r"\b\d{5}(?:-\d{4})?\b", "[ZIP]", text)
-    text = re.sub(
-        r"\b\d{1,5}\s+[A-Za-z0-9\s]+\s(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Drive|Dr|Court|Ct|Boulevard|Blvd)\b",
-        "[ADDRESS]",
-        text,
-        flags=re.IGNORECASE,
-    )
-    text = re.sub(r"(Name:\s*)([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)", r"\1[NAME]", text)
-    text = re.sub(r"\b([A-Z][a-z]{2,}\s[A-Z][a-z]{2,})\b", "[NAME]", text)
-    text = re.sub(r"\b\d{4,}\b", "[ID]", text)
-    return text
+    sanitized_lines = []
+    for line in text.splitlines():
+        stripped_line = line.strip()
+        preserved_prefix = None
+        working_line = line
+
+        if stripped_line in SECTION_HEADER_ALLOWLIST:
+            sanitized_lines.append(line)
+            continue
+
+        numbered_heading_match = re.match(r"^(\d+\.\s+)(.+)$", stripped_line)
+        if numbered_heading_match and numbered_heading_match.group(2) in SECTION_HEADER_ALLOWLIST:
+            sanitized_lines.append(line)
+            continue
+
+        if ":" in line:
+            possible_header, remainder = line.split(":", 1)
+            normalized_header = re.sub(r"^\d+\.\s+", "", possible_header.strip())
+            if normalized_header in SECTION_HEADER_ALLOWLIST:
+                preserved_prefix = possible_header.strip()
+                working_line = remainder.lstrip()
+
+        sanitized_line = re.sub(r"\b[\w\.-]+@[\w\.-]+\.\w+\b", "[EMAIL]", working_line)
+        sanitized_line = re.sub(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b", "[PHONE]", sanitized_line)
+        sanitized_line = re.sub(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b", "[DOB]", sanitized_line)
+        sanitized_line = re.sub(r"\b\d{3}-\d{2}-\d{4}\b", "[SSN]", sanitized_line)
+        sanitized_line = re.sub(r"\b\d{5}(?:-\d{4})?\b", "[ZIP]", sanitized_line)
+        sanitized_line = re.sub(
+            r"\b\d{1,5}\s+[A-Za-z0-9\s]+\s(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Drive|Dr|Court|Ct|Boulevard|Blvd)\b",
+            "[ADDRESS]",
+            sanitized_line,
+            flags=re.IGNORECASE,
+        )
+        sanitized_line = re.sub(r"(Name:\s*)([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)", r"\1[NAME]", sanitized_line)
+        sanitized_line = re.sub(r"\b([A-Z][a-z]{2,}\s[A-Z][a-z]{2,})\b", "[NAME]", sanitized_line)
+        sanitized_line = re.sub(r"\b\d{4,}\b", "[ID]", sanitized_line)
+        if preserved_prefix:
+            sanitized_line = f"{preserved_prefix}: {sanitized_line}" if sanitized_line else f"{preserved_prefix}:"
+        sanitized_lines.append(sanitized_line)
+
+    return "\n".join(sanitized_lines)
 
 
 def sanitize_identifiers(text: str) -> str:
@@ -389,6 +546,42 @@ def detect_documentation_gaps(intake_text: str, practitioner_type: str) -> list[
     return gaps
 
 
+def extract_attachment_text(uploaded_file) -> tuple[str, dict]:
+    if not uploaded_file:
+        return "", {
+            "included": False,
+            "filename": "None",
+            "handling_type": "none",
+            "ui_message": "",
+        }
+
+    filename = uploaded_file.name
+    suffix = Path(filename).suffix.lower()
+    metadata = {
+        "included": True,
+        "filename": filename,
+        "handling_type": "none",
+        "ui_message": "",
+    }
+
+    if suffix == ".pdf":
+        metadata["handling_type"] = "pdf manual review"
+        metadata["ui_message"] = "PDF attached - manual review recommended"
+        return "", metadata
+
+    try:
+        attachment_text = uploaded_file.getvalue().decode("utf-8", errors="ignore").strip()
+    except Exception:
+        attachment_text = ""
+
+    if attachment_text:
+        metadata["handling_type"] = "text incorporated"
+        return sanitize_identifiers(attachment_text), metadata
+
+    metadata["handling_type"] = "none"
+    return "", metadata
+
+
 def list_saved_outputs() -> list[Path]:
     files = list(OUTPUTS_DIR.rglob("*.md")) if OUTPUTS_DIR.exists() else []
     return sorted(files, reverse=True)
@@ -453,6 +646,7 @@ For pharmacist review, prioritize:
 - contraindication concern flags
 - counseling questions
 - escalation to pharmacist review when medication complexity is present
+- request dose, frequency, route, timing, and a complete medication list when not provided
 
 Do not make definitive interaction claims unless explicitly supported.
 """.strip()
@@ -522,8 +716,10 @@ Generate exactly these sections:
         pharmacist_guardrails = """
 For pharmacist outputs:
 - Do NOT make definitive risk claims
-- Use cautious phrasing such as: may warrant review, potential concern, consider evaluating
+- Use cautious phrasing such as: may warrant review, possible concern, requires pharmacist review
 - Avoid implying confirmed interactions unless explicitly stated
+- Always request dose, frequency, route, timing, and a complete medication list when they are not provided
+- Do not recommend medication changes, discontinuation, or definitive clinical conclusions without pharmacist review
 """.strip()
 
     return f"""
@@ -548,6 +744,8 @@ Rules:
 - Use professional, natural language.
 - Keep the individual-facing language gentle, supportive, and easy to understand.
 - When details are missing, state the gap explicitly instead of filling it in.
+- Do not introduce demographics, medications, diagnoses, allergies, supplements, assessments, or clinical facts that were not explicitly provided in the intake text or attachment.
+- Use phrases such as not provided, requires clarification, or should be verified instead of inventing missing details.
 - Make system-added interpretation reviewable and clearly supported by the intake.
 - Use \"{prof_term}\" in the professional-facing note.
 - Use second-person language (\"you\") in the individual-facing summary.
@@ -635,19 +833,33 @@ def save_output_local(
     review_status: str,
     review_outcome: str,
     review_complete: bool,
+    attachment_metadata: dict,
     qc_summary: dict,
 ) -> Path:
     practitioner_dir = OUTPUTS_DIR / practitioner_type
     practitioner_dir.mkdir(parents=True, exist_ok=True)
     file_path = practitioner_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
-    content = f"""# Intake-to-Note Assistant Output
+    content = f"""# {APP_NAME} Output
 
 ## Metadata
 - Saved At: {datetime.now().isoformat(timespec='seconds')}
+- Product: {APP_NAME}
+- Product Tagline: {APP_TAGLINE}
+- Copyright: {COPYRIGHT_NOTICE}
 - Practitioner Type: {practitioner_type}
 - Review Status: {review_status}
 - Review Outcome: {review_outcome}
-- Review Complete: {'Yes' if review_complete else 'No'}
+- Review Completion Status: {'Complete' if review_complete else 'Incomplete'}
+
+## Ownership Notice
+{COPYRIGHT_NOTICE}
+
+{DRAFTSAFE_OWNERSHIP_NOTICE}
+
+## Attachment Metadata
+- Attachment Included: {'Yes' if attachment_metadata['included'] else 'No'}
+- Filename: {attachment_metadata['filename']}
+- Handling Type: {attachment_metadata['handling_type']}
 
 ## Intake Text (Sanitized)
 {intake_text}
@@ -682,6 +894,16 @@ def save_output_local(
 
 ## Reminder
 Draft only. Requires human review before use.
+
+## DraftSafe™ Ownership & Use Notice
+
+{COPYRIGHT_NOTICE}
+
+DraftSafe™ is an independently developed educational and workflow-support prototype.
+
+This system assists with intake organization, AI-assisted draft generation, deterministic documentation auditing, and practitioner review support but does not replace licensed professional judgment.
+
+No portion of this workflow, generated structure, audit methodology, or implementation may be reproduced or commercialized without written permission from the author.
 """
     file_path.write_text(content, encoding="utf-8")
     return file_path
@@ -698,6 +920,7 @@ def save_output_cloud(
     review_status: str,
     review_outcome: str,
     review_complete: bool,
+    attachment_metadata: dict,
     qc_summary: dict,
 ) -> None:
     _ = (
@@ -711,6 +934,7 @@ def save_output_cloud(
         review_status,
         review_outcome,
         review_complete,
+        attachment_metadata,
         qc_summary,
     )
     # Placeholder for future cloud storage. Only sanitized data may be passed here.
@@ -727,11 +951,17 @@ def save_output(
     review_status: str,
     review_outcome: str,
     review_complete: bool,
+    attachment_metadata: dict,
     qc_summary: dict,
 ) -> Path:
     sanitized_intake_text = sanitize_identifiers(intake_text)
     sanitized_generated_output = sanitize_identifiers(generated_output)
     sanitized_reviewer_comments = sanitize_identifiers(reviewer_comments)
+    sanitized_attachment_metadata = {
+        "included": attachment_metadata.get("included", False),
+        "filename": sanitize_identifiers(attachment_metadata.get("filename", "None")) or "None",
+        "handling_type": attachment_metadata.get("handling_type", "none"),
+    }
 
     local_path = save_output_local(
         practitioner_type=practitioner_type,
@@ -744,6 +974,7 @@ def save_output(
         review_status=review_status,
         review_outcome=review_outcome,
         review_complete=review_complete,
+        attachment_metadata=sanitized_attachment_metadata,
         qc_summary=qc_summary,
     )
     save_output_cloud(
@@ -757,6 +988,7 @@ def save_output(
         review_status=review_status,
         review_outcome=review_outcome,
         review_complete=review_complete,
+        attachment_metadata=sanitized_attachment_metadata,
         qc_summary=qc_summary,
     )
     return local_path
@@ -767,15 +999,16 @@ if not st.session_state["run_incremented"]:
     increment_runs()
     st.session_state["run_incremented"] = True
 
-st.title("Intake-to-Note Assistant")
-st.write(
-    "Assists practitioner-specific documentation by identifying relevant concepts, highlighting gaps, and drafting reviewable language for human review."
-)
+st.title(APP_NAME)
+st.subheader(APP_TAGLINE)
+st.caption(APP_SUBTITLE)
 
 usage = get_usage()
 IS_ADMIN = False
 
 with st.sidebar:
+    st.markdown(f"### {APP_NAME}")
+    st.caption(APP_TAGLINE)
     st.header("Privacy and Safety Notes")
     st.markdown(
         """
@@ -788,6 +1021,11 @@ with st.sidebar:
     )
 
     st.subheader("Privacy Controls")
+    audit_enabled = st.checkbox(
+        "Enable Documentation Audit",
+        value=True,
+        help="Runs a deterministic keyword-based completeness check after draft generation.",
+    )
     st.selectbox(
         "Model (future)",
         ["openai", "claude"],
@@ -816,9 +1054,31 @@ with st.sidebar:
     )
 
     st.subheader("Usage Dashboard")
-    st.metric("Total App Runs", usage["total_runs"])
-    st.metric("Reviews Submitted", usage["total_reviews_submitted"])
-    st.info(f"Join the test group — {usage['total_reviews_submitted']} reviews completed so far.")
+    total_app_runs = safe_dashboard_value(usage.get("total_runs"), 0)
+    total_reviews_submitted = safe_dashboard_value(usage.get("total_reviews_submitted"), 0)
+    average_audit_score = safe_average(
+        usage.get("audit_score_sum", 0.0),
+        usage.get("audit_score_count", 0),
+    )
+    average_audit_score_display = safe_dashboard_value(f"{average_audit_score:.2f}", 0)
+
+    if usage.get("missing_section_counts"):
+        most_common_missing = max(
+            usage["missing_section_counts"],
+            key=usage["missing_section_counts"].get,
+        )
+    else:
+        most_common_missing = "None recorded yet"
+
+    st.metric("Total App Runs", total_app_runs)
+    st.metric("Reviews Submitted", total_reviews_submitted)
+    st.metric("Avg Audit Score", average_audit_score_display)
+    st.caption(
+        f"Most common missing section: {safe_dashboard_value(most_common_missing)}"
+    )
+    if usage.get("audit_score_count", 0) == 0 and usage.get("total_reviews_submitted", 0) == 0:
+        st.info("Dashboard analytics will populate as reviews and audits are completed.")
+    st.info(f"Join the test group — {total_reviews_submitted} reviews completed so far.")
 
 st.warning("All identifiers are automatically removed and replaced with placeholders unless explicitly enabled.")
 st.warning("All outputs must be reviewed. Identifier sanitization is not guaranteed to be perfect.")
@@ -842,6 +1102,9 @@ if st.session_state["save_success_message"]:
         st.caption(f"Saved file: {st.session_state['save_success_path']}")
     st.session_state["save_success_message"] = ""
     st.session_state["save_success_path"] = ""
+if st.session_state["save_incomplete_warning"]:
+    st.warning(st.session_state["save_incomplete_warning"])
+    st.session_state["save_incomplete_warning"] = ""
 
 practitioner = st.selectbox(
     "Practitioner Type",
@@ -859,6 +1122,11 @@ person_term_choice = st.selectbox(
     help="Controls the label used in the professional-facing note. The individual-facing summary still uses second-person language.",
 )
 intake_text = st.text_area("Paste Intake Form Responses", height=220)
+attachment = st.file_uploader(
+    "Attach intake form or supporting notes (optional)",
+    type=["txt", "md", "csv", "pdf"],
+)
+st.caption("Use synthetic or non-identifying data for testing.")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -873,15 +1141,28 @@ st.caption("Tone is automatically set to a gentle, patient-facing style for the 
 
 if st.button("Generate Draft"):
     raw_input = intake_text.strip()
-    if not raw_input:
-        st.warning("Please enter intake form responses.")
+    attachment_text, attachment_metadata = extract_attachment_text(attachment)
+    if not raw_input and not attachment_text:
+        if attachment_metadata.get("handling_type") == "pdf manual review":
+            st.warning("PDF attached - manual review recommended. Please also provide intake text.")
+        else:
+            st.warning("Please enter intake form responses or attach a text-based intake file.")
     else:
-        model_input = prepare_interaction_text(raw_input)
-        sanitized_input = sanitize_identifiers(raw_input)
+        combined_raw_input = raw_input or attachment_text
+        if raw_input and attachment_text:
+            combined_raw_input = (
+                f"{raw_input}\n\nAttached Intake/Form Content:\n{attachment_text}"
+            )
+
+        model_input = prepare_interaction_text(combined_raw_input)
+        sanitized_input = sanitize_identifiers(combined_raw_input)
         detected_flags = detect_flags(model_input)
         practitioner_triggers = detect_practitioner_triggers(sanitized_input, practitioner)
         documentation_gaps = detect_documentation_gaps(sanitized_input, practitioner)
         practitioner_context = PRACTITIONER_KNOWLEDGE_MAP.get(practitioner, {})
+
+        if attachment_metadata["ui_message"]:
+            st.info(attachment_metadata["ui_message"])
 
         if detected_flags:
             st.error("Potential safety flags detected. Mandatory human review recommended.")
@@ -912,10 +1193,24 @@ if st.button("Generate Draft"):
         if error_message:
             st.error(error_message)
         elif generated_output:
+            audit_result = None
+            audit_message = ""
+            audit_supported = practitioner.lower() in [
+                "occupational therapist",
+                "pharmacist",
+            ]
+            if audit_enabled and audit_supported:
+                audit_result = audit_clinical_note(generated_output, practitioner)
+                if "error" in audit_result:
+                    audit_result = None
+                    audit_message = "Audit not available for selected practitioner type."
+            elif audit_enabled:
+                audit_message = "Audit not available for selected practitioner type."
+
             st.session_state["last_intake_text"] = raw_input
             st.session_state["generated_output"] = generated_output
             interactive_output = prepare_interaction_text(generated_output)
-            final_sanitized_input = sanitize_identifiers(raw_input)
+            final_sanitized_input = sanitize_identifiers(combined_raw_input)
             final_sanitized_output = sanitize_identifiers(generated_output)
             qc_input = qc_sanitization_check(final_sanitized_input)
             qc_output = qc_sanitization_check(final_sanitized_output)
@@ -924,6 +1219,7 @@ if st.button("Generate Draft"):
                 "practitioner": practitioner,
                 "person_term_choice": person_term_choice,
                 "raw_input": raw_input,
+                "combined_raw_input": combined_raw_input,
                 "detected_flags": detected_flags,
                 "practitioner_triggers": practitioner_triggers,
                 "documentation_gaps": documentation_gaps,
@@ -934,6 +1230,10 @@ if st.button("Generate Draft"):
                 "qc_input": qc_input,
                 "qc_output": qc_output,
                 "confidence": qc_output["confidence"],
+                "audit_enabled": audit_enabled,
+                "audit_result": audit_result,
+                "audit_message": audit_message,
+                "attachment_metadata": attachment_metadata,
             }
         else:
             st.error("No output generated.")
@@ -959,6 +1259,41 @@ if draft_data:
         if draft_data["documentation_gaps"]
         else "No obvious gaps detected."
     )
+
+    if draft_data.get("attachment_metadata", {}).get("included"):
+        st.subheader("Attachment Metadata")
+        st.write(
+            {
+                "Filename": draft_data["attachment_metadata"].get("filename", "None"),
+                "Handling Type": draft_data["attachment_metadata"].get("handling_type", "none"),
+            }
+        )
+        if draft_data["attachment_metadata"].get("handling_type") == "pdf manual review":
+            st.info("PDF attached - manual review recommended")
+
+    st.subheader("Documentation Audit")
+    if draft_data.get("audit_enabled"):
+        audit_result = draft_data.get("audit_result")
+        if audit_result:
+            st.write(
+                f"Documentation Completeness Score: {audit_result['completeness_score']:.1f}"
+            )
+            st.write(
+                "Found:",
+                audit_result["found"] if audit_result["found"] else "None detected",
+            )
+            st.write(
+                "Missing:",
+                audit_result["missing"] if audit_result["missing"] else "None detected",
+            )
+            if audit_result["missing"]:
+                st.warning(
+                    "Some recommended documentation elements may be missing. Please review before finalizing."
+                )
+        else:
+            st.caption(draft_data.get("audit_message") or "Audit not available for selected practitioner type.")
+    else:
+        st.caption("Documentation audit is disabled for this draft.")
 
     st.subheader("System-Added Content (Review Required)")
     st.info("System-added content must be reviewed by the practitioner before use.")
@@ -1017,7 +1352,7 @@ if draft_data:
     reviewer_comments = st.text_area("Reviewer Comments", key="reviewer_comments")
 
     if st.button("Submit Review and Save"):
-        sanitized_input = sanitize_identifiers(st.session_state["last_intake_text"])
+        sanitized_input = sanitize_identifiers(draft_data.get("combined_raw_input", st.session_state["last_intake_text"]))
         sanitized_output = sanitize_identifiers(st.session_state["generated_output"])
         sanitized_comments = sanitize_identifiers(reviewer_comments)
 
@@ -1064,11 +1399,15 @@ if draft_data:
             review_status=review_status,
             review_outcome=review_outcome,
             review_complete=review_complete,
+            attachment_metadata=draft_data.get("attachment_metadata", {}),
             qc_summary=qc_summary,
         )
         increment_reviews()
+        update_audit_metrics(draft_data.get("audit_result"))
         st.session_state["save_success_message"] = "Output saved successfully (sanitized)."
         st.session_state["save_success_path"] = saved_path.name
+        if not review_complete:
+                st.session_state["save_incomplete_warning"] = "Output saved, but review was marked incomplete."
         st.rerun()
 
 if IS_ADMIN:
@@ -1090,3 +1429,8 @@ if IS_ADMIN:
         st.text_area("Saved Output", content, height=300)
     else:
         st.info("No saved outputs yet.")
+
+st.divider()
+for footer_line in APP_FOOTER_LINES:
+    st.caption(footer_line)
+st.caption(DRAFTSAFE_OWNERSHIP_NOTICE)

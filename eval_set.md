@@ -1,6 +1,6 @@
 
 
-# Evaluation Set: Intake-to-Note Assistant
+# Evaluation Set: DraftSafe
 
 ## Test Cases
 

@@ -1,8 +1,10 @@
-# Intake-to-Note Assistant
+# DraftSafe™
 
-**Current Status:** Version 1.4.3
+AI-Assisted Practitioner Documentation & Review
 
-This Streamlit app assists practitioner-specific documentation by identifying relevant concepts, highlighting gaps, and drafting reviewable assessment and follow-up language for human review. It supports multiple practitioner types and preserves human review boundaries.
+**Current Status:** Version 1.4.4
+
+DraftSafe™ is a Streamlit prototype for practitioner documentation support that combines AI-assisted drafting, deterministic auditing, and structured human review workflows.
 
 ## Model Architecture
 
@@ -11,6 +13,61 @@ The system uses a model adapter layer to allow future integration with multiple 
 Current state:
 - OpenAI only (active)
 - Other adapters are placeholders
+
+## Version History
+
+## V1.4.4 - Branding & Ownership Protection Update
+
+- Standardized DraftSafe™ branding
+- Added copyright notices
+- Added stronger ownership attribution language
+- Added repository intellectual property notices
+- Added saved-output ownership notices
+- Added non-permissive reuse language
+- Added repository privacy guidance
+- Improved presentation and commercialization readiness
+
+- 1.4.3: Added attachment support, stronger hallucination guardrails, dashboard fallbacks, safer review completion labeling, and cleaner saved output metadata.
+- 1.4.2: Improved trigger detection with lightweight semantic cue grouping and assignment-aligned output formatting.
+- 1.4.1 and earlier: Added practitioner-specific drafting, sanitization safeguards, dashboard tracking, and session-isolated review behavior.
+
+## Ownership & Intellectual Property Notice
+
+© 2026 Shamir Dominique. All rights reserved.
+
+DraftSafe™ and its associated workflow concepts, interface structure, deterministic audit integration methodology, practitioner-assistive logic, and supporting implementation materials were independently developed by Shamir Dominique.
+
+This repository is intended for:
+- educational purposes
+- demonstration purposes
+- workflow exploration
+- academic presentation
+- prototype development
+
+No portion of this repository or supporting implementation may be reproduced, redistributed, reverse engineered, or commercialized without explicit written permission from the author.
+
+## Legal Note
+
+DraftSafe™ is currently presented as an independently developed prototype and educational workflow-support platform.
+
+This notice does not constitute:
+- formal trademark registration
+- patent protection
+- legal exclusivity beyond applicable intellectual property rights
+
+Formal trademark, copyright registration, patent filing, licensing, and commercialization strategy may require consultation with a qualified attorney.
+
+## Repository Visibility Reminder
+
+If this repository is intended for private development or commercialization planning, consider maintaining the repository as private and avoiding permissive open-source licensing.
+
+## Version 1.4.3 Demo Readiness and Workflow Safety
+
+- Added optional attachment intake support for txt, md, csv, and pdf uploads
+- Strengthened prompt guardrails to avoid invented clinical details
+- Preserved section headers during sanitization
+- Added attachment metadata and clearer review completion status in saved outputs
+- Hardened dashboard fallbacks for empty analytics states
 
 ## Version 1.4.2 Targeted Evaluation Alignment
 
@@ -30,6 +87,21 @@ Current state:
 - Added pharmacist supplement/medication review cues
 - Added wellness consultant advisory boundaries
 - Maintains human review, sanitization, and safe storage controls
+
+## Documentation Audit Layer
+
+The app includes a deterministic audit layer that evaluates generated drafts for structured completeness.
+
+The audit layer:
+- checks for required sections
+- identifies missing elements
+- computes completeness scores
+- supports human review workflows
+
+The audit layer does NOT:
+- replace practitioner judgment
+- generate recommendations
+- enforce blocking validation
 
 ## Version 1.1 Security Update
 - Added environment-based API key handling
@@ -100,6 +172,13 @@ Manual review is required for all outputs.
 
 ## Important Privacy Note
 This prototype should only be used with synthetic or non-identifying data. It is not HIPAA-ready and should not be used with real patient-identifying information.
+
+## Attachment Support
+
+- Optional attachments are supported for txt, md, csv, and pdf files
+- Text-based attachments are sanitized and appended under `Attached Intake/Form Content`
+- PDF uploads record filename only and display a manual review notice
+- Use synthetic or non-identifying data for testing
 
 ## Local Setup
 
@@ -187,6 +266,21 @@ taskkill /F /IM python.exe
 taskkill /F /IM ngrok.exe
 ```
 
+## Full Reset / Restart
+
+Use this when the local app, tunnel, or dashboard session gets into a bad state.
+
+```powershell
+taskkill /F /IM python.exe
+taskkill /F /IM ngrok.exe
+cd "C:\Users\shami\OneDrive\Documents\John Hopkins\Generative AI\Repository\Final Project"
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+.\.venv\Scripts\Activate.ps1
+python -m streamlit run app.py --server.port 8501
+```
+
+After Streamlit starts, open the local URL it prints, usually `http://localhost:8501`.
+
 ### Testing Notes
 
 - Use synthetic or non-identifying data only.
@@ -205,6 +299,9 @@ See `project_plan.md` for design details and `eval_set.md` for test cases.
 - Usage metrics track:
   - total app runs
   - total reviews submitted
+  - average audit completeness score
+  - most common missing section
+- Empty analytics states now fall back safely instead of interrupting the session
 - Metrics are stored locally in usage.json and not committed to Git
 
 ## PID Toggle (Session-Based)
@@ -219,6 +316,7 @@ See `project_plan.md` for design details and `eval_set.md` for test cases.
 
 - Raw identifiers are never written to disk
 - Saved files contain sanitized intake text and sanitized generated output only
+- Saved files include attachment metadata and review completion status
 - Reviewer comments are sanitized before save
 - QC validation runs before save and is stored as metadata
 - Manual review is required for every saved output

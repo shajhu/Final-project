@@ -1,7 +1,7 @@
 
 # 1. Project Title
 
-Intake-to-Note Assistant for Pharmacist Review
+DraftSafe for Pharmacist Review
 
 ---
 
