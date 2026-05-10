@@ -1,6 +1,7 @@
 # API key is loaded from .env for local development
 # Do not hardcode secrets
 
+import base64
 import json
 import os
 import re
@@ -22,6 +23,8 @@ BASE_DIR = Path(__file__).resolve().parent
 OUTPUTS_DIR = BASE_DIR / "outputs"
 USAGE_FILE = BASE_DIR / "usage.json"
 USE_ASSIGNMENT_FORMAT = True
+APP_LOGO_PATH = BASE_DIR / "assets" / "draftsafe_logo_bw.png"
+APP_LOGO_BASE64 = base64.b64encode(APP_LOGO_PATH.read_bytes()).decode("ascii") if APP_LOGO_PATH.exists() else ""
 APP_NAME = "DraftSafe™"
 APP_TAGLINE = "AI-Assisted Practitioner Documentation & Review"
 APP_SUBTITLE = "AI-assisted drafting, deterministic auditing, and human review support."
@@ -73,24 +76,20 @@ PRACTITIONER_KNOWLEDGE_MAP = {
             "body mechanics",
             "fall prevention",
             "injury avoidance",
-            "how to properly fall",
             "motor control",
             "balance",
             "coordination",
-            "functional mobility",
-            "ADLs",
-            "IADLs",
+            "adl",
+            "iadl",
             "functional independence",
         ],
         "documentation_needs": [
-            "assessment",
-            "identified deficits",
+            "key findings",
+            "deficits",
             "functional impact",
-            "justification for therapy",
-            "recommended intervention",
-            "home exercise program considerations",
-            "safety education",
-            "work-related functional limitations when workers comp is mentioned",
+            "justification for skilled therapy",
+            "intervention direction",
+            "safety concerns",
         ],
         "source_note": "Use OT terminology consistent with AOTA OTPF concepts such as occupations, performance skills, client factors, ADLs/IADLs, and functional participation. Use CDC STEADI concepts when fall risk or fall prevention is present.",
     },
@@ -999,9 +998,129 @@ if not st.session_state["run_incremented"]:
     increment_runs()
     st.session_state["run_incremented"] = True
 
-st.title(APP_NAME)
-st.subheader(APP_TAGLINE)
-st.caption(APP_SUBTITLE)
+st.markdown(
+    """
+    <style>
+    .draftsafe-header-card {
+        display: flex;
+        align-items: flex-start;
+        margin: 0 0 0.7rem 0;
+        padding: 0.85rem 1rem;
+        background: #f5f7fa;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+    }
+    .draftsafe-brand-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.18rem;
+        width: 100%;
+    }
+    .draftsafe-logo {
+        width: 54px;
+        min-width: 54px;
+        height: auto;
+        border-radius: 8px;
+        margin: 0.12rem 0.5rem 0 0;
+        display: block;
+    }
+    .draftsafe-copy-wrap {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        min-width: 0;
+    }
+    .draftsafe-title-row {
+        display: flex;
+        align-items: baseline;
+    }
+    .draftsafe-title {
+        margin: 0;
+        color: #333333;
+        font-size: 2.28rem;
+        font-weight: 700;
+        line-height: 1.02;
+        letter-spacing: -0.02em;
+    }
+    .draftsafe-tagline {
+        margin: 0.18rem 0 0 0;
+        color: #5a5a5a;
+        font-size: 1rem;
+        font-weight: 600;
+        line-height: 1.2;
+    }
+    .draftsafe-subtitle {
+        margin: 0.16rem 0 0 0;
+        color: #7a7a7a;
+        font-size: 0.9rem;
+        line-height: 1.28;
+    }
+    @media (prefers-color-scheme: dark) {
+        .draftsafe-header-card {
+            background: rgba(17, 24, 39, 0.92);
+            border-color: rgba(148, 163, 184, 0.18);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+        }
+        .draftsafe-title {
+            color: #f8fafc;
+        }
+        .draftsafe-tagline {
+            color: #e2e8f0;
+        }
+        .draftsafe-subtitle {
+            color: #cbd5e1;
+        }
+    }
+    @media (max-width: 768px) {
+        .draftsafe-header-card {
+            padding: 0.7rem 0.75rem;
+            border-radius: 14px;
+        }
+        .draftsafe-brand-row {
+            gap: 0.1rem;
+        }
+        .draftsafe-logo {
+            width: 44px;
+            min-width: 44px;
+            margin: 0.08rem 0.4rem 0 0;
+        }
+        .draftsafe-title {
+            font-size: 1.72rem;
+        }
+        .draftsafe-tagline {
+            font-size: 0.92rem;
+        }
+        .draftsafe-subtitle {
+            font-size: 0.82rem;
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+logo_markup = ""
+if APP_LOGO_BASE64:
+    logo_markup = f'<img class="draftsafe-logo" src="data:image/png;base64,{APP_LOGO_BASE64}" alt="DraftSafe logo" />'
+
+st.markdown(
+    f"""
+    <div class="draftsafe-header-card">
+        <div class="draftsafe-brand-row">
+            {logo_markup}
+            <div class="draftsafe-copy-wrap">
+                <div class="draftsafe-title-row">
+                    <div class="draftsafe-title">{APP_NAME}</div>
+                </div>
+                <div class="draftsafe-tagline">{APP_TAGLINE}</div>
+                <div class="draftsafe-subtitle">{APP_SUBTITLE}</div>
+            </div>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 usage = get_usage()
 IS_ADMIN = False

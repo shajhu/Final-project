@@ -2,7 +2,7 @@
 
 AI-Assisted Practitioner Documentation & Review
 
-**Current Status:** Version 1.4.4
+**Current Status:** Version 1.4.5
 
 DraftSafe™ is a Streamlit prototype for practitioner documentation support that combines AI-assisted drafting, deterministic auditing, and structured human review workflows.
 
@@ -14,7 +14,109 @@ Current state:
 - OpenAI only (active)
 - Other adapters are placeholders
 
+## Restart / Run Instructions
+
+Use these steps when restarting the app for local testing or sharing through ngrok.
+
+If this is a first-time setup on a new machine, complete the Local Setup section after these quick run instructions.
+
+### 1. Open the project folder
+
+Open the repository folder in VS Code:
+
+```powershell
+cd "C:\Users\shami\OneDrive\Documents\John Hopkins\Generative AI\Repository\Final Project"
+```
+
+### 2. Activate the virtual environment
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+\.venv\Scripts\Activate.ps1
+```
+
+You should see `(.venv)` at the start of the terminal line.
+
+### 3. Start the Streamlit app
+
+```powershell
+python -m streamlit run app.py --server.port 8501
+```
+
+If port `8501` is already in use, either close old Python processes or use a different port:
+
+```powershell
+taskkill /F /IM python.exe
+python -m streamlit run app.py --server.port 8501
+```
+
+### 4. Open locally
+
+After the app starts, open the local URL shown by Streamlit, usually:
+
+```text
+http://localhost:8501
+```
+
+### 5. Share remotely with ngrok
+
+In a second terminal, run:
+
+```powershell
+ngrok http 8501
+```
+
+Copy the HTTPS forwarding link that ngrok provides, for example:
+
+```text
+https://example-name.ngrok-free.dev
+```
+
+Send that link to the tester.
+
+### 6. Keep the app running
+
+For remote testing, keep both terminals open:
+
+- Terminal 1: Streamlit app
+- Terminal 2: ngrok tunnel
+
+The shared link will stop working if either terminal is closed, the laptop sleeps, or the internet connection drops.
+
+### 7. Clean shutdown
+
+When testing is complete, close everything with:
+
+```powershell
+taskkill /F /IM python.exe
+taskkill /F /IM ngrok.exe
+```
+
+## Full Reset / Restart
+
+Use this when the local app, tunnel, or dashboard session gets into a bad state.
+
+```powershell
+taskkill /F /IM python.exe
+taskkill /F /IM ngrok.exe
+cd "C:\Users\shami\OneDrive\Documents\John Hopkins\Generative AI\Repository\Final Project"
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+\.venv\Scripts\Activate.ps1
+python -m streamlit run app.py --server.port 8501
+```
+
+After Streamlit starts, open the local URL it prints, usually `http://localhost:8501`.
+
 ## Version History
+
+## V1.4.5 - Monochromatic Branding Integration
+
+- Integrated finalized monochromatic DraftSafe™ logo
+- Added branded responsive application header
+- Improved professional visual identity
+- Standardized title/logo alignment
+- Enhanced demo and presentation readiness
+- Refined healthcare SaaS-style appearance
 
 ## V1.4.4 - Branding & Ownership Protection Update
 
@@ -60,6 +162,19 @@ Formal trademark, copyright registration, patent filing, licensing, and commerci
 ## Repository Visibility Reminder
 
 If this repository is intended for private development or commercialization planning, consider maintaining the repository as private and avoiding permissive open-source licensing.
+
+## Branding
+
+DraftSafe™ uses a modern monochromatic medical-style branding system designed around:
+- safety
+- documentation review
+- practitioner workflow support
+- deterministic validation
+
+Logo symbolism:
+- shield = review and safety
+- clipboard = documentation workflow
+- checkmark = audit and validation support
 
 ## Version 1.4.3 Demo Readiness and Workflow Safety
 
@@ -159,107 +274,6 @@ Each saved output includes a confidence level:
 Manual review is required for all outputs.
 
 ## Supported Practitioner Types
-- Pharmacist
-- Nurse
-- Wellness Consultant
-- Occupational Therapist
-- General Medical Reviewer
-
-## Human Review Boundary
-- All outputs are drafts only and require human review before use.
-- High-risk cases (e.g., flagged safety concerns) are always escalated for mandatory review.
-- The app does not diagnose or make autonomous treatment decisions.
-
-## Important Privacy Note
-This prototype should only be used with synthetic or non-identifying data. It is not HIPAA-ready and should not be used with real patient-identifying information.
-
-## Attachment Support
-
-- Optional attachments are supported for txt, md, csv, and pdf files
-- Text-based attachments are sanitized and appended under `Attached Intake/Form Content`
-- PDF uploads record filename only and display a manual review notice
-- Use synthetic or non-identifying data for testing
-
-## Local Setup
-
-```bash
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
-setx OPENAI_API_KEY "your_api_key_here"
-python -m streamlit run app.py
-```
-
-## Restart / Run Instructions
-
-Use these steps when restarting the app for local testing or sharing through ngrok.
-
-### 1. Open the project folder
-
-Open the repository folder in VS Code:
-
-```powershell
-cd "C:\Users\shami\OneDrive\Documents\John Hopkins\Generative AI\Repository\Final Project"
-```
-
-### 2. Activate the virtual environment
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
-.\.venv\Scripts\Activate.ps1
-```
-
-You should see `(.venv)` at the start of the terminal line.
-
-### 3. Start the Streamlit app
-
-```powershell
-python -m streamlit run app.py --server.port 8501
-```
-
-If port `8501` is already in use, either close old Python processes or use a different port:
-
-```powershell
-taskkill /F /IM python.exe
-python -m streamlit run app.py --server.port 8501
-```
-
-### 4. Open locally
-
-After the app starts, open the local URL shown by Streamlit, usually:
-
-```text
-http://localhost:8501
-```
-
-### 5. Share remotely with ngrok
-
-In a second terminal, run:
-
-```powershell
-ngrok http 8501
-```
-
-Copy the HTTPS forwarding link that ngrok provides, for example:
-
-```text
-https://example-name.ngrok-free.dev
-```
-
-Send that link to the tester.
-
-### 6. Keep the app running
-
-For remote testing, keep both terminals open:
-
-- Terminal 1: Streamlit app
-- Terminal 2: ngrok tunnel
-
-The shared link will stop working if either terminal is closed, the laptop sleeps, or the internet connection drops.
-
-### 7. Clean shutdown
-
-When testing is complete, close everything with:
 
 ```powershell
 taskkill /F /IM python.exe
@@ -280,6 +294,18 @@ python -m streamlit run app.py --server.port 8501
 ```
 
 After Streamlit starts, open the local URL it prints, usually `http://localhost:8501`.
+
+## Local Setup
+
+Use this once when setting up the project on a new machine or environment.
+
+```bash
+python -m venv .venv
+\.venv\Scripts\activate
+pip install -r requirements.txt
+setx OPENAI_API_KEY "your_api_key_here"
+python -m streamlit run app.py
+```
 
 ### Testing Notes
 
