@@ -2,7 +2,7 @@
 
 AI-Assisted Practitioner Documentation & Review
 
-**Current Status:** Version 1.4.7
+**Current Status:** Version 1.4.8
 
 DraftSafe™ is a Streamlit prototype for practitioner documentation support that combines AI-assisted drafting, deterministic auditing, and structured human review workflows.
 
@@ -122,7 +122,19 @@ After Streamlit starts, open the local URL it prints, usually `http://localhost:
 
 ## Version History
 
-## V1.4.7 - Demo Stabilization & Visual Audit Polish
+## V1.4.8 — Pharmacist Audit Calibration Refinement
+
+- Improved pharmacist documentation quality weighting
+- Reduced false-positive completeness scoring
+- Added uncertainty-aware audit logic
+- Added medication reconciliation validation
+- Improved safety escalation calibration
+- Added generated-output quality review checks
+- Improved fragmented intake handling
+- Refined review-area detection
+- Preserved lightweight deterministic architecture
+
+## V1.4.7 — Demo Stabilization & Visual Audit Polish
 
 - Added lightweight audit dashboard metrics
 - Added documentation completeness progress bar

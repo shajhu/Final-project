@@ -861,7 +861,7 @@ def save_output_local(
 - Handling Type: {attachment_metadata['handling_type']}
 
 ## Intake Text (Sanitized)
-{intake_text}
+[{intake_text}]
 
 ## Detected Flags
 {', '.join(detected_flags) if detected_flags else 'None'}
@@ -1089,6 +1089,21 @@ st.markdown(
     .draftsafe-review-box li {
         margin: 0.18rem 0;
     }
+    .draftsafe-list-box {
+        margin-top: 0.35rem;
+        padding: 0.8rem 0.9rem;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+    }
+    .draftsafe-list-box ul {
+        margin: 0;
+        padding-left: 1.1rem;
+        color: #475569;
+    }
+    .draftsafe-list-box li {
+        margin: 0.18rem 0;
+    }
     @media (prefers-color-scheme: dark) {
         .draftsafe-header-card {
             background: rgba(17, 24, 39, 0.92);
@@ -1117,6 +1132,13 @@ st.markdown(
             color: #e2e8f0;
         }
         .draftsafe-review-box ul {
+            color: #cbd5e1;
+        }
+        .draftsafe-list-box {
+            background: rgba(15, 23, 42, 0.52);
+            border-color: rgba(148, 163, 184, 0.18);
+        }
+        .draftsafe-list-box ul {
             color: #cbd5e1;
         }
     }
@@ -1412,20 +1434,37 @@ if draft_data:
         st.subheader("Generated Output")
         st.text_area("Output", st.session_state["generated_output"], height=300)
 
+    practitioner_trigger_items = draft_data["practitioner_triggers"]
+    documentation_gap_items = draft_data["documentation_gaps"]
+
     st.subheader("Practitioner-Specific Triggers")
-    st.caption(f"Detected {len(draft_data['practitioner_triggers'])} practitioner-relevant cues")
-    st.write(
-        draft_data["practitioner_triggers"]
-        if draft_data["practitioner_triggers"]
-        else "No practitioner-specific triggers detected."
-    )
+    st.caption(f"Detected {len(practitioner_trigger_items)} practitioner-relevant cues")
+    if practitioner_trigger_items:
+        trigger_markup = "".join(f"<li>{item}</li>" for item in practitioner_trigger_items)
+        st.markdown(
+            f"""
+            <div class="draftsafe-list-box">
+                <ul>{trigger_markup}</ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.caption("No practitioner-specific triggers detected.")
 
     st.subheader("Possible Documentation Gaps")
-    st.write(
-        draft_data["documentation_gaps"]
-        if draft_data["documentation_gaps"]
-        else "No obvious gaps detected."
-    )
+    if documentation_gap_items:
+        gap_markup = "".join(f"<li>{item}</li>" for item in documentation_gap_items)
+        st.markdown(
+            f"""
+            <div class="draftsafe-list-box">
+                <ul>{gap_markup}</ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.caption("No obvious gaps detected.")
 
     if draft_data.get("attachment_metadata", {}).get("included"):
         st.subheader("Attachment Metadata")
@@ -1443,7 +1482,7 @@ if draft_data:
         audit_result = draft_data.get("audit_result")
         if audit_result:
             completeness_percent = int(round(audit_result["completeness_score"] * 100))
-            missing_sections = audit_result["missing"]
+            missing_sections = audit_result.get("review_areas", audit_result["missing"])
             found_sections = audit_result["found"]
             practitioner_metric_value = {
                 "Occupational Therapist": "OT",
@@ -1451,10 +1490,11 @@ if draft_data:
                 "Wellness Consultant": "Wellness",
                 "General Medical Reviewer": "Reviewer",
             }.get(draft_data["practitioner"], draft_data["practitioner"])
-            if draft_data["detected_flags"]:
+            audit_review_status = audit_result.get("review_status", "")
+            if draft_data["detected_flags"] or audit_review_status == "Mandatory Human Review":
                 review_badge = "Human Review Required"
                 review_metric_value = "Required"
-            elif missing_sections:
+            elif missing_sections or audit_review_status == "Additional Review Suggested":
                 review_badge = "Additional Review Suggested"
                 review_metric_value = "Suggested"
             else:
@@ -1535,8 +1575,18 @@ if draft_data:
     review_status_default = (
         "Mandatory Human Review"
         if draft_data["detected_flags"]
+        or draft_data.get("audit_result", {}).get("review_status") == "Mandatory Human Review"
         else "Standard Human Review"
     )
+    current_review_status = st.session_state.get("review_status_select")
+    if current_review_status not in {"Standard Human Review", "Mandatory Human Review"}:
+        st.session_state["review_status_select"] = review_status_default
+    elif (
+        review_status_default == "Mandatory Human Review"
+        and current_review_status != "Mandatory Human Review"
+    ):
+        st.session_state["review_status_select"] = "Mandatory Human Review"
+
     review_status = st.selectbox(
         "Review Status",
         ["Standard Human Review", "Mandatory Human Review"],
