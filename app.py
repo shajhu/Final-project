@@ -1056,6 +1056,39 @@ st.markdown(
         font-size: 0.9rem;
         line-height: 1.28;
     }
+    .draftsafe-review-badge {
+        display: inline-block;
+        margin: 0.35rem 0 0.4rem 0;
+        padding: 0.28rem 0.75rem;
+        border-radius: 999px;
+        background: #eef2f7;
+        border: 1px solid #d8dee8;
+        color: #334155;
+        font-size: 0.84rem;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+    }
+    .draftsafe-review-box {
+        margin-top: 0.5rem;
+        padding: 0.8rem 0.9rem;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+    }
+    .draftsafe-review-box-title {
+        margin: 0 0 0.4rem 0;
+        color: #334155;
+        font-size: 0.95rem;
+        font-weight: 600;
+    }
+    .draftsafe-review-box ul {
+        margin: 0;
+        padding-left: 1.1rem;
+        color: #475569;
+    }
+    .draftsafe-review-box li {
+        margin: 0.18rem 0;
+    }
     @media (prefers-color-scheme: dark) {
         .draftsafe-header-card {
             background: rgba(17, 24, 39, 0.92);
@@ -1069,6 +1102,21 @@ st.markdown(
             color: #e2e8f0;
         }
         .draftsafe-subtitle {
+            color: #cbd5e1;
+        }
+        .draftsafe-review-badge {
+            background: rgba(51, 65, 85, 0.7);
+            border-color: rgba(148, 163, 184, 0.22);
+            color: #e2e8f0;
+        }
+        .draftsafe-review-box {
+            background: rgba(15, 23, 42, 0.52);
+            border-color: rgba(148, 163, 184, 0.18);
+        }
+        .draftsafe-review-box-title {
+            color: #e2e8f0;
+        }
+        .draftsafe-review-box ul {
             color: #cbd5e1;
         }
     }
@@ -1394,20 +1442,61 @@ if draft_data:
     if draft_data.get("audit_enabled"):
         audit_result = draft_data.get("audit_result")
         if audit_result:
-            st.write(
-                f"Documentation Completeness Score: {audit_result['completeness_score']:.1f}"
+            completeness_percent = int(round(audit_result["completeness_score"] * 100))
+            missing_sections = audit_result["missing"]
+            found_sections = audit_result["found"]
+            practitioner_metric_value = {
+                "Occupational Therapist": "OT",
+                "Pharmacist": "Pharm.",
+                "Wellness Consultant": "Wellness",
+                "General Medical Reviewer": "Reviewer",
+            }.get(draft_data["practitioner"], draft_data["practitioner"])
+            if draft_data["detected_flags"]:
+                review_badge = "Human Review Required"
+                review_metric_value = "Required"
+            elif missing_sections:
+                review_badge = "Additional Review Suggested"
+                review_metric_value = "Suggested"
+            else:
+                review_badge = "Draft Ready for Review"
+                review_metric_value = "Ready"
+
+            metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+            metric_col1.metric("Practitioner Type", practitioner_metric_value)
+            metric_col2.metric("Completeness", f"{completeness_percent}%")
+            metric_col3.metric("Missing Sections", str(len(missing_sections)))
+            metric_col4.metric("Review Status", review_metric_value)
+
+            st.caption(f"Documentation Checks for {draft_data['practitioner']}")
+            st.caption(f"Documentation Completeness: {completeness_percent}%")
+            st.progress(completeness_percent)
+            st.markdown(
+                f'<div class="draftsafe-review-badge">{review_badge}</div>',
+                unsafe_allow_html=True,
             )
             st.write(
                 "Found:",
-                audit_result["found"] if audit_result["found"] else "None detected",
+                found_sections if found_sections else "None detected",
             )
             st.write(
                 "Missing:",
-                audit_result["missing"] if audit_result["missing"] else "None detected",
+                missing_sections if missing_sections else "None detected",
             )
-            if audit_result["missing"]:
+            if missing_sections:
+                review_area_items = "".join(
+                    f"<li>{item[:1].upper() + item[1:]}</li>" for item in missing_sections
+                )
+                st.markdown(
+                    f"""
+                    <div class="draftsafe-review-box">
+                        <div class="draftsafe-review-box-title">Detected Review Areas</div>
+                        <ul>{review_area_items}</ul>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
                 st.warning(
-                    "Some recommended documentation elements may be missing. Please review before finalizing."
+                    "Some documentation details may still need review before finalizing."
                 )
         else:
             st.caption(draft_data.get("audit_message") or "Audit not available for selected practitioner type.")

@@ -2,7 +2,7 @@
 
 AI-Assisted Practitioner Documentation & Review
 
-**Current Status:** Version 1.4.5
+**Current Status:** Version 1.4.7
 
 DraftSafe™ is a Streamlit prototype for practitioner documentation support that combines AI-assisted drafting, deterministic auditing, and structured human review workflows.
 
@@ -20,37 +20,50 @@ Use these steps when restarting the app for local testing or sharing through ngr
 
 If this is a first-time setup on a new machine, complete the Local Setup section after these quick run instructions.
 
-### 1. Open the project folder
+### 1. Stop any previous app or tunnel processes
+
+Start with a clean reset so Streamlit or ngrok does not keep an old session or locked port alive.
+
+```powershell
+taskkill /F /IM python.exe
+taskkill /F /IM ngrok.exe
+```
+
+If PowerShell says no matching process was found, that is fine. Continue to the next step.
+
+### 2. Open the project folder
 
 Open the repository folder in VS Code:
 
 ```powershell
-cd "C:\Users\shami\OneDrive\Documents\John Hopkins\Generative AI\Repository\Final Project"
+Set-Location "C:\Users\shami\OneDrive\Documents\John Hopkins\Generative AI\Repository\Final Project"
 ```
 
-### 2. Activate the virtual environment
+### 3. Allow script execution for this PowerShell session
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
-\.venv\Scripts\Activate.ps1
 ```
 
-You should see `(.venv)` at the start of the terminal line.
+This change applies only to the current PowerShell window.
 
-### 3. Start the Streamlit app
+### 4. Activate the virtual environment
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+You should see `(.venv)` at the start of the terminal line. If activation fails, confirm that the `.venv` folder exists inside the project folder and that you already completed Local Setup once.
+
+### 5. Start the Streamlit app
 
 ```powershell
 python -m streamlit run app.py --server.port 8501
 ```
 
-If port `8501` is already in use, either close old Python processes or use a different port:
+If Streamlit reports that port `8501` is already in use, run the reset commands from Step 1 again, then rerun the command above.
 
-```powershell
-taskkill /F /IM python.exe
-python -m streamlit run app.py --server.port 8501
-```
-
-### 4. Open locally
+### 6. Open locally
 
 After the app starts, open the local URL shown by Streamlit, usually:
 
@@ -58,7 +71,7 @@ After the app starts, open the local URL shown by Streamlit, usually:
 http://localhost:8501
 ```
 
-### 5. Share remotely with ngrok
+### 7. Share remotely with ngrok (optional)
 
 In a second terminal, run:
 
@@ -74,7 +87,7 @@ https://example-name.ngrok-free.dev
 
 Send that link to the tester.
 
-### 6. Keep the app running
+### Keep the app running
 
 For remote testing, keep both terminals open:
 
@@ -83,7 +96,7 @@ For remote testing, keep both terminals open:
 
 The shared link will stop working if either terminal is closed, the laptop sleeps, or the internet connection drops.
 
-### 7. Clean shutdown
+### Clean shutdown
 
 When testing is complete, close everything with:
 
@@ -99,15 +112,26 @@ Use this when the local app, tunnel, or dashboard session gets into a bad state.
 ```powershell
 taskkill /F /IM python.exe
 taskkill /F /IM ngrok.exe
-cd "C:\Users\shami\OneDrive\Documents\John Hopkins\Generative AI\Repository\Final Project"
+Set-Location "C:\Users\shami\OneDrive\Documents\John Hopkins\Generative AI\Repository\Final Project"
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
-\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 python -m streamlit run app.py --server.port 8501
 ```
 
 After Streamlit starts, open the local URL it prints, usually `http://localhost:8501`.
 
 ## Version History
+
+## V1.4.7 - Demo Stabilization & Visual Audit Polish
+
+- Added lightweight audit dashboard metrics
+- Added documentation completeness progress bar
+- Added review status indicators
+- Added detected review area summaries
+- Preserved session-only output visibility
+- Refined presentation/demo readiness
+- Improved visual workflow clarity
+- Preserved lightweight responsive UI architecture
 
 ## V1.4.5 - Monochromatic Branding Integration
 
@@ -207,6 +231,16 @@ Logo symbolism:
 
 The app includes a deterministic audit layer that evaluates generated drafts for structured completeness.
 
+## Demo Dashboard & Review Layer
+
+DraftSafe™ includes a lightweight visual audit dashboard that:
+- displays documentation completeness
+- highlights missing review areas
+- reinforces human review requirements
+- supports practitioner workflow validation
+
+The dashboard is intentionally lightweight and session-based to preserve simplicity and responsiveness.
+
 The audit layer:
 - checks for required sections
 - identifies missing elements
@@ -275,33 +309,36 @@ Manual review is required for all outputs.
 
 ## Supported Practitioner Types
 
-```powershell
-taskkill /F /IM python.exe
-taskkill /F /IM ngrok.exe
-```
+- Pharmacist
+- Nurse
+- Wellness Consultant
+- Occupational Therapist
+- General Medical Reviewer
 
-## Full Reset / Restart
+## Human Review Boundary
 
-Use this when the local app, tunnel, or dashboard session gets into a bad state.
+- All outputs are drafts only and require human review before use.
+- High-risk cases (e.g., flagged safety concerns) are always escalated for mandatory review.
+- The app does not diagnose or make autonomous treatment decisions.
 
-```powershell
-taskkill /F /IM python.exe
-taskkill /F /IM ngrok.exe
-cd "C:\Users\shami\OneDrive\Documents\John Hopkins\Generative AI\Repository\Final Project"
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
-.\.venv\Scripts\Activate.ps1
-python -m streamlit run app.py --server.port 8501
-```
+## Important Privacy Note
 
-After Streamlit starts, open the local URL it prints, usually `http://localhost:8501`.
+This prototype should only be used with synthetic or non-identifying data. It is not HIPAA-ready and should not be used with real patient-identifying information.
+
+## Attachment Support
+
+- Optional attachments are supported for txt, md, csv, and pdf files
+- Text-based attachments are sanitized and appended under `Attached Intake/Form Content`
+- PDF uploads record filename only and display a manual review notice
+- Use synthetic or non-identifying data for testing
 
 ## Local Setup
 
 Use this once when setting up the project on a new machine or environment.
 
-```bash
+```powershell
 python -m venv .venv
-\.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 setx OPENAI_API_KEY "your_api_key_here"
 python -m streamlit run app.py
