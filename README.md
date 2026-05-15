@@ -2,7 +2,7 @@
 
 AI-Assisted Practitioner Documentation & Review
 
-**Current Status:** Version 1.4.8
+**Current Status:** Version 1.4.9
 
 DraftSafe™ is a Streamlit prototype for practitioner documentation support that combines AI-assisted drafting, deterministic auditing, and structured human review workflows.
 
@@ -120,19 +120,41 @@ python -m streamlit run app.py --server.port 8501
 
 After Streamlit starts, open the local URL it prints, usually `http://localhost:8501`.
 
+## Streamlit Community Cloud Deployment
+
+Use these settings to deploy DraftSafe™ to Streamlit Community Cloud without changing the local workflow.
+
+### Deployment checklist
+
+- Entrypoint: `app.py`
+- Python version: use the included `runtime.txt`
+- Dependencies: install from `requirements.txt`
+- Secret: add `OPENAI_API_KEY` in the Streamlit Cloud app secrets settings
+- Output behavior: local runs save persistently to `outputs/`; deployed runs use temporary app storage and may reset between sessions or redeploys
+
+### Recommended Streamlit Cloud secret
+
+```toml
+OPENAI_API_KEY = "your_api_key_here"
+```
+
+### Deployment notes
+
+- Do not commit real secrets, `.env`, or Streamlit secrets files.
+- The auxiliary skill remains separate and is not required for app deployment.
+- Local ngrok and local save workflows remain unchanged.
+- Cloud-saved outputs are intended for demo and evaluation use only and should be treated as temporary.
+
 ## Version History
 
-## V1.4.8 — Pharmacist Audit Calibration Refinement
+## V1.4.9 — Deployment Readiness Release
 
-- Improved pharmacist documentation quality weighting
-- Reduced false-positive completeness scoring
-- Added uncertainty-aware audit logic
-- Added medication reconciliation validation
-- Improved safety escalation calibration
-- Added generated-output quality review checks
-- Improved fragmented intake handling
-- Refined review-area detection
-- Preserved lightweight deterministic architecture
+- Added Streamlit Community Cloud deployment preparation
+- Added deployment-safe secret lookup for local env or Streamlit secrets
+- Preserved local output folder behavior for development
+- Added temporary writable storage fallback for deployed environments
+- Kept audit workflows, UI behavior, and practitioner logic unchanged
+- Preserved auxiliary skill modularity and local/ngrok workflows
 
 ## V1.4.7 — Demo Stabilization & Visual Audit Polish
 
@@ -353,7 +375,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 setx OPENAI_API_KEY "your_api_key_here"
-python -m streamlit run app.py
+python -m streamlit run app.py --server.port 8501
 ```
 
 ### Testing Notes

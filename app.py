@@ -5,6 +5,7 @@ import base64
 import json
 import os
 import re
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -20,8 +21,6 @@ load_dotenv()
 MODEL_NAME = "gpt-4.1-mini"  # If model access fails, gpt-4o-mini may be used as a fallback.
 MODEL_PROVIDER = "openai"
 BASE_DIR = Path(__file__).resolve().parent
-OUTPUTS_DIR = BASE_DIR / "outputs"
-USAGE_FILE = BASE_DIR / "usage.json"
 USE_ASSIGNMENT_FORMAT = True
 APP_LOGO_PATH = BASE_DIR / "assets" / "draftsafe_logo_bw.png"
 APP_LOGO_BASE64 = base64.b64encode(APP_LOGO_PATH.read_bytes()).decode("ascii") if APP_LOGO_PATH.exists() else ""
@@ -41,6 +40,7 @@ APP_FOOTER_LINES = [
     "This system does not replace licensed clinical judgment, medical advice, or professional review.",
     "Unauthorized reproduction, redistribution, reverse engineering, or commercialization of this workflow, interface, audit structure, or supporting implementation without written permission is prohibited.",
 ]
+CLOUD_TEMP_DIR = Path(tempfile.gettempdir()) / "draftsafe"
 SECTION_HEADER_ALLOWLIST = {
     "Findings",
     "Assessment",
@@ -255,6 +255,41 @@ PRACTITIONER_TRIGGER_GROUPS = {
         ("escalation concern", ["chest pain", "shortness of breath", "confusion", "emergency", "severe"]),
     ],
 }
+
+
+def resolve_storage_root() -> Path:
+    preferred_root = CLOUD_TEMP_DIR if os.getenv("STREAMLIT_SHARING_MODE") else BASE_DIR
+    fallback_root = CLOUD_TEMP_DIR
+
+    for candidate in (preferred_root, fallback_root):
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            probe_path = candidate / ".draftsafe_write_test"
+            probe_path.write_text("ok", encoding="utf-8")
+            probe_path.unlink(missing_ok=True)
+            return candidate
+        except OSError:
+            continue
+
+    return BASE_DIR
+
+
+def get_secret_value(name: str) -> str | None:
+    env_value = os.getenv(name)
+    if env_value:
+        return env_value
+
+    try:
+        secret_value = st.secrets.get(name)
+    except Exception:
+        secret_value = None
+
+    return str(secret_value) if secret_value else None
+
+
+STORAGE_ROOT = resolve_storage_root()
+OUTPUTS_DIR = STORAGE_ROOT / "outputs"
+USAGE_FILE = STORAGE_ROOT / "usage.json"
 
 st.set_page_config(page_title=APP_NAME, layout="centered")
 
@@ -587,9 +622,11 @@ def list_saved_outputs() -> list[Path]:
 
 
 def get_model():
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = get_secret_value("OPENAI_API_KEY")
     if not api_key:
-        st.error("OPENAI_API_KEY environment variable not set. Please set it in your environment or .env file.")
+        st.error(
+            "OPENAI_API_KEY is not set. Add it to your local environment/.env file or Streamlit secrets before generating drafts."
+        )
         return None
 
     if MODEL_PROVIDER == "openai":
