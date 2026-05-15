@@ -6,6 +6,8 @@ __pycache__/
 # Streamlit
 .streamlit/
 .streamlit/secrets.toml
+outputs/**/*.md
+!outputs/README.md
 # VSCode
 .vscode/
 usage.json

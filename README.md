@@ -2,108 +2,9 @@
 
 AI-Assisted Practitioner Documentation & Review
 
-**Current Status:** Version 1.4.9
+**Current Status:** Version 1.5.0
 
-DraftSafe™ is a Streamlit prototype for practitioner documentation support that combines AI-assisted drafting, deterministic auditing, and structured human review workflows.
-
-## Model Architecture
-
-The system uses a model adapter layer to allow future integration with multiple AI providers (e.g., OpenAI, Claude).
-
-Current state:
-- OpenAI only (active)
-- Other adapters are placeholders
-
-## Restart / Run Instructions
-
-Use these steps when restarting the app for local testing or sharing through ngrok.
-
-If this is a first-time setup on a new machine, complete the Local Setup section after these quick run instructions.
-
-### 1. Stop any previous app or tunnel processes
-
-Start with a clean reset so Streamlit or ngrok does not keep an old session or locked port alive.
-
-```powershell
-taskkill /F /IM python.exe
-taskkill /F /IM ngrok.exe
-```
-
-If PowerShell says no matching process was found, that is fine. Continue to the next step.
-
-### 2. Open the project folder
-
-Open the repository folder in VS Code:
-
-```powershell
-Set-Location "C:\Users\shami\OneDrive\Documents\John Hopkins\Generative AI\Repository\Final Project"
-```
-
-### 3. Allow script execution for this PowerShell session
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
-```
-
-This change applies only to the current PowerShell window.
-
-### 4. Activate the virtual environment
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-You should see `(.venv)` at the start of the terminal line. If activation fails, confirm that the `.venv` folder exists inside the project folder and that you already completed Local Setup once.
-
-### 5. Start the Streamlit app
-
-```powershell
-python -m streamlit run app.py --server.port 8501
-```
-
-If Streamlit reports that port `8501` is already in use, run the reset commands from Step 1 again, then rerun the command above.
-
-### 6. Open locally
-
-After the app starts, open the local URL shown by Streamlit, usually:
-
-```text
-http://localhost:8501
-```
-
-### 7. Share remotely with ngrok (optional)
-
-In a second terminal, run:
-
-```powershell
-ngrok http 8501
-```
-
-Copy the HTTPS forwarding link that ngrok provides, for example:
-
-```text
-https://example-name.ngrok-free.dev
-```
-
-Send that link to the tester.
-
-### Keep the app running
-
-For remote testing, keep both terminals open:
-
-- Terminal 1: Streamlit app
-- Terminal 2: ngrok tunnel
-
-The shared link will stop working if either terminal is closed, the laptop sleeps, or the internet connection drops.
-
-### Clean shutdown
-
-When testing is complete, close everything with:
-
-```powershell
-taskkill /F /IM python.exe
-taskkill /F /IM ngrok.exe
-```
+DraftSafe™ is a Streamlit prototype that supports practitioner documentation workflows for fragmented intake material. It combines AI-assisted draft generation, lightweight deterministic validation, and structured human review without replacing practitioner judgment.
 
 ## Full Reset / Restart
 
@@ -118,302 +19,318 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 python -m streamlit run app.py --server.port 8501
 ```
 
-After Streamlit starts, open the local URL it prints, usually `http://localhost:8501`.
+After Streamlit starts, open `http://localhost:8501`.
+
+## Setup & Usage
+
+### First-time local setup
+
+```powershell
+Set-Location "C:\Users\shami\OneDrive\Documents\John Hopkins\Generative AI\Repository\Final Project"
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+setx OPENAI_API_KEY "your_api_key_here"
+```
+
+### Run locally
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+.\.venv\Scripts\Activate.ps1
+python -m streamlit run app.py --server.port 8501
+```
+
+### Optional ngrok sharing
+
+Run this in a second terminal after the app is already running:
+
+```powershell
+ngrok http 8501
+```
+
+Keep both the Streamlit terminal and the ngrok terminal open during remote testing.
+
+### Quick usage flow
+
+1. Select a practitioner type.
+2. Paste synthetic or non-identifying intake content.
+3. Generate the draft.
+4. Review practitioner-specific triggers and deterministic audit results.
+5. Complete human review and save the sanitized output.
 
 ## Streamlit Community Cloud Deployment
 
-Use these settings to deploy DraftSafe™ to Streamlit Community Cloud without changing the local workflow.
+DraftSafe™ is prepared for Streamlit Community Cloud without changing the local workflow.
 
 ### Deployment checklist
 
 - Entrypoint: `app.py`
-- Python version: use the included `runtime.txt`
+- Python version: use `runtime.txt`
 - Dependencies: install from `requirements.txt`
-- Secret: add `OPENAI_API_KEY` in the Streamlit Cloud app secrets settings
-- Output behavior: local runs save persistently to `outputs/`; deployed runs use temporary app storage and may reset between sessions or redeploys
+- Required secret: `OPENAI_API_KEY`
+- Optional admin secret for restricted output review access: `DRAFTSAFE_ADMIN_KEY`
+- Local output behavior remains unchanged
+- Deployed output handling uses temporary writable storage and may reset between sessions or redeploys
 
-### Recommended Streamlit Cloud secret
+### Recommended Streamlit secrets
 
 ```toml
 OPENAI_API_KEY = "your_api_key_here"
+# Optional:
+# DRAFTSAFE_ADMIN_KEY = "your_admin_key_here"
 ```
 
 ### Deployment notes
 
 - Do not commit real secrets, `.env`, or Streamlit secrets files.
-- The auxiliary skill remains separate and is not required for app deployment.
-- Local ngrok and local save workflows remain unchanged.
-- Cloud-saved outputs are intended for demo and evaluation use only and should be treated as temporary.
+- The deployment keeps the app lightweight and session-oriented.
+- The auxiliary skill remains separate from the deployed app.
+- Cloud-saved outputs are intended for demo and evaluation use and should be treated as temporary.
+
+## Context, User, and Problem
+
+DraftSafe™ is aimed at practitioners reviewing fragmented intake documentation, especially:
+
+- occupational therapists
+- pharmacists
+- practitioners who need a fast first-pass draft from incomplete intake material
+
+The workflow problem is narrow and practical:
+
+- intake details often arrive incomplete or scattered
+- documentation burden slows review work
+- missing details are easy to overlook in repetitive workflows
+- review consistency suffers when the first draft is unstructured
+
+This project focuses on documentation support rather than autonomous clinical decision-making.
+
+## Solution & Workflow Design
+
+DraftSafe™ combines:
+
+- AI-assisted draft generation
+- lightweight deterministic validation
+- practitioner-specific workflow support
+- structured documentation review assistance
+
+The core workflow is:
+
+`intake -> AI draft -> audit/validation -> human review`
+
+DraftSafe™ is designed to support documentation workflows rather than replace practitioner judgment.
+
+Design choices kept intentionally lightweight:
+
+- Streamlit single-app interface
+- model adapter for provider abstraction
+- deterministic audit layer for transparent review support
+- session-based visibility for generated outputs
+- local file save flow for simple evaluation and demonstration
+
+## Auxiliary Skill Module
+
+The auxiliary skill remains modular and separate from the main app.
+
+Companion skill path:
+
+```text
+.agents/skills/clinical-gap-audit/
+```
+
+Its role is to preserve a standalone skill artifact for modular evaluation of the clinical-gap audit logic without merging that implementation into `app.py`.
+
+This separation keeps:
+
+- the Streamlit app focused on the user workflow
+- the auxiliary skill independently reviewable
+- the submission aligned with modularity expectations
+
+## Evaluation & Baseline Comparison
+
+Evaluation materials are organized around the project workflow rather than benchmark-style model claims.
+
+Primary comparison framing:
+
+- baseline: a plain draft-generation workflow with no practitioner-specific cue handling and no deterministic audit support
+- DraftSafe™: practitioner-specific prompting plus deterministic audit and explicit human review framing
+
+Evaluation emphasis:
+
+- whether fragmented intake information is organized more clearly
+- whether missing details are surfaced more consistently
+- whether review status is made more explicit
+- whether the output remains usable as a draft rather than overstating certainty
+
+Reference files:
+
+- `eval_set.md`
+- `project_plan.md`
+
+## Results & Limitations
+
+Observed strengths of the workflow:
+
+- improves first-draft structure for fragmented intake content
+- makes missing documentation details more visible
+- reinforces review status and human-review expectations
+- provides practitioner-specific framing without changing the underlying intake facts
+
+Current limitations:
+
+- output quality still depends on intake quality
+- deterministic audit logic is narrow and heuristic by design
+- pharmacist and OT support are stronger than unsupported practitioner types
+- saved cloud outputs are temporary in deployed environments
+- the system is not HIPAA-ready and is not intended for real identifying data
+
+## Human Review & Safety Boundaries
+
+Human review remains mandatory for every generated output.
+
+DraftSafe™ does not:
+
+- diagnose
+- make autonomous treatment decisions
+- replace licensed practitioner judgment
+- guarantee complete identifier removal in every case
+
+Safety boundaries built into the workflow:
+
+- identifier sanitization before save
+- deterministic review cues and audit status support
+- explicit review completion workflow
+- mandatory escalation framing for higher-risk or incomplete cases
+- admin-only saved-output access disabled unless a private key is explicitly configured
+
+## Artifact Snapshot
+
+Key repository artifacts:
+
+- `app.py`: Streamlit app and practitioner workflow
+- `audit_layer.py`: deterministic audit logic
+- `model_adapter.py`: model abstraction layer
+- `outputs/README.md`: local-output folder guidance without committed saved artifacts
+- `assets/`: branding and presentation assets
+- `eval_set.md`: evaluation cases
+- `project_plan.md`: project design notes
+- `security_notes.md`: privacy and security notes
+- `runtime.txt`: Streamlit Cloud Python runtime pin
+
+## Demo Workflow
+
+Suggested grader/demo path:
+
+1. Launch the app locally or through Streamlit Cloud.
+2. Choose `Pharmacist` or `Occupational Therapist`.
+3. Paste a short synthetic fragmented intake.
+4. Generate the draft.
+5. Review the deterministic audit summary and review status.
+6. Submit review and save the sanitized output.
+7. Inspect the local saved markdown artifact only when running in a private local environment.
+
+This path allows a grader to clone, install, run, and evaluate the workflow within minutes.
+
+## Output Handling
+
+Local development behavior:
+
+- outputs save to `outputs/`
+- saved files contain sanitized intake text and sanitized generated output only
+- reviewer comments are sanitized before save
+- saved artifacts are intended to remain local and private
+
+Deployed behavior:
+
+- the same save workflow is preserved
+- deployed environments use temporary writable storage
+- cloud-saved artifacts are not treated as durable or public storage
+
+Repository behavior:
+
+- generated markdown outputs are not included in the public repository
+- the app shows generated content only within the active session for non-admin users
+
+This keeps output handling lightweight, deterministic, and demo-safe without introducing database infrastructure.
+
+## Troubleshooting
+
+### App will not start
+
+- confirm the virtual environment is activated
+- confirm dependencies were installed with `pip install -r requirements.txt`
+- confirm `OPENAI_API_KEY` is set locally or in Streamlit secrets
+
+### Port 8501 is busy
+
+```powershell
+taskkill /F /IM python.exe
+taskkill /F /IM ngrok.exe
+```
+
+Then rerun the app.
+
+### Streamlit Cloud generates a secret error
+
+- add `OPENAI_API_KEY` to the Streamlit Cloud secrets panel
+- redeploy or rerun the app after saving the secret
+
+### Admin-only output review is unavailable
+
+- this is expected unless `DRAFTSAFE_ADMIN_KEY` is configured privately
+- without that key, saved-output review remains disabled in the interface
+
+### Outputs do not persist in deployment
+
+- this is expected for ephemeral cloud runs
+- use local runs when persistent saved artifacts are needed for evaluation
+
+### Testing reminder
+
+- use synthetic or non-identifying data only
+- do not use real patient-identifying information
 
 ## Version History
 
+## V1.5.0 — Submission Lock Release
+
+- finalized README structure for submission and grading speed
+- aligned repository documentation to workflow-focused rubric language
+- clarified setup, deployment, evaluation, modularity, and privacy sections
+- removed committed saved-output artifacts from the repository
+- disabled admin-only output access unless a private admin key is configured
+- preserved top-of-file reset and setup guidance
+- preserved version history at the bottom of the README
+
 ## V1.4.9 — Deployment Readiness Release
 
-- Added Streamlit Community Cloud deployment preparation
-- Added deployment-safe secret lookup for local env or Streamlit secrets
-- Preserved local output folder behavior for development
-- Added temporary writable storage fallback for deployed environments
-- Kept audit workflows, UI behavior, and practitioner logic unchanged
-- Preserved auxiliary skill modularity and local/ngrok workflows
+- added Streamlit Community Cloud deployment preparation
+- added deployment-safe secret lookup for local env or Streamlit secrets
+- preserved local output folder behavior for development
+- added temporary writable storage fallback for deployed environments
+- kept audit workflows, UI behavior, and practitioner logic unchanged
+- preserved auxiliary skill modularity and local/ngrok workflows
 
 ## V1.4.7 — Demo Stabilization & Visual Audit Polish
 
-- Added lightweight audit dashboard metrics
-- Added documentation completeness progress bar
-- Added review status indicators
-- Added detected review area summaries
-- Preserved session-only output visibility
-- Refined presentation/demo readiness
-- Improved visual workflow clarity
-- Preserved lightweight responsive UI architecture
+- added lightweight audit dashboard metrics
+- added documentation completeness progress bar
+- added review status indicators
+- added detected review area summaries
+- preserved session-only output visibility
+- refined presentation and demo readiness
 
-## V1.4.5 - Monochromatic Branding Integration
+## V1.4.5 — Monochromatic Branding Integration
 
-- Integrated finalized monochromatic DraftSafe™ logo
-- Added branded responsive application header
-- Improved professional visual identity
-- Standardized title/logo alignment
-- Enhanced demo and presentation readiness
-- Refined healthcare SaaS-style appearance
+- integrated finalized monochromatic DraftSafe™ logo
+- added branded responsive application header
+- improved visual identity and title alignment
 
-## V1.4.4 - Branding & Ownership Protection Update
+## V1.4.4 — Branding & Ownership Protection Update
 
-- Standardized DraftSafe™ branding
-- Added copyright notices
-- Added stronger ownership attribution language
-- Added repository intellectual property notices
-- Added saved-output ownership notices
-- Added non-permissive reuse language
-- Added repository privacy guidance
-- Improved presentation and commercialization readiness
+- standardized DraftSafe™ branding
+- added ownership and repository protection language
 
-- 1.4.3: Added attachment support, stronger hallucination guardrails, dashboard fallbacks, safer review completion labeling, and cleaner saved output metadata.
-- 1.4.2: Improved trigger detection with lightweight semantic cue grouping and assignment-aligned output formatting.
-- 1.4.1 and earlier: Added practitioner-specific drafting, sanitization safeguards, dashboard tracking, and session-isolated review behavior.
+## V1.4.3 and Earlier
 
-## Ownership & Intellectual Property Notice
-
-© 2026 Shamir Dominique. All rights reserved.
-
-DraftSafe™ and its associated workflow concepts, interface structure, deterministic audit integration methodology, practitioner-assistive logic, and supporting implementation materials were independently developed by Shamir Dominique.
-
-This repository is intended for:
-- educational purposes
-- demonstration purposes
-- workflow exploration
-- academic presentation
-- prototype development
-
-No portion of this repository or supporting implementation may be reproduced, redistributed, reverse engineered, or commercialized without explicit written permission from the author.
-
-## Legal Note
-
-DraftSafe™ is currently presented as an independently developed prototype and educational workflow-support platform.
-
-This notice does not constitute:
-- formal trademark registration
-- patent protection
-- legal exclusivity beyond applicable intellectual property rights
-
-Formal trademark, copyright registration, patent filing, licensing, and commercialization strategy may require consultation with a qualified attorney.
-
-## Repository Visibility Reminder
-
-If this repository is intended for private development or commercialization planning, consider maintaining the repository as private and avoiding permissive open-source licensing.
-
-## Branding
-
-DraftSafe™ uses a modern monochromatic medical-style branding system designed around:
-- safety
-- documentation review
-- practitioner workflow support
-- deterministic validation
-
-Logo symbolism:
-- shield = review and safety
-- clipboard = documentation workflow
-- checkmark = audit and validation support
-
-## Version 1.4.3 Demo Readiness and Workflow Safety
-
-- Added optional attachment intake support for txt, md, csv, and pdf uploads
-- Strengthened prompt guardrails to avoid invented clinical details
-- Preserved section headers during sanitization
-- Added attachment metadata and clearer review completion status in saved outputs
-- Hardened dashboard fallbacks for empty analytics states
-
-## Version 1.4.2 Targeted Evaluation Alignment
-
-- Improved trigger detection with lightweight semantic cue grouping
-- Tightened pharmacist prompt language to avoid overclaiming interaction risk
-- Updated OT auto terminology to default to patient
-- Added optional assignment-aligned output section format
-- Clarified system-added content labeling and cue count display
-
-## Version 1.4 Practitioner-Specific Assistant Upgrade
-
-- Transitioned from summary generation to practitioner-specific documentation assistance
-- Added trigger detection by practitioner type
-- Added documentation gap detection
-- Added OT-focused reasoning around findings, deficits, functional impact, justification, and intervention
-- Added nurse medication-safety documentation cues
-- Added pharmacist supplement/medication review cues
-- Added wellness consultant advisory boundaries
-- Maintains human review, sanitization, and safe storage controls
-
-## Documentation Audit Layer
-
-The app includes a deterministic audit layer that evaluates generated drafts for structured completeness.
-
-## Demo Dashboard & Review Layer
-
-DraftSafe™ includes a lightweight visual audit dashboard that:
-- displays documentation completeness
-- highlights missing review areas
-- reinforces human review requirements
-- supports practitioner workflow validation
-
-The dashboard is intentionally lightweight and session-based to preserve simplicity and responsiveness.
-
-The audit layer:
-- checks for required sections
-- identifies missing elements
-- computes completeness scores
-- supports human review workflows
-
-The audit layer does NOT:
-- replace practitioner judgment
-- generate recommendations
-- enforce blocking validation
-
-## Version 1.1 Security Update
-- Added environment-based API key handling
-- Added privacy and safety reminders in the UI
-- Added safety flag detection for higher-risk intake content
-- Added security_notes.md documenting current privacy boundaries
-- Added crypto_utils.py as an encryption-ready placeholder for future encrypted storage
-
-## Version 1.2.1 Identifier Protection
-
-- Added automatic identifier removal and masking
-- Replaces names and IDs with placeholders (e.g., [NAME], [ID], [EMAIL])
-- Prevents storage of identifiers in output files
-- Introduced optional toggle for controlled identifier handling
-- Strengthens privacy and testing safety
-
-## Version 1.2.5 Dashboard and Tracking
-
-- Added usage tracking (app runs and reviews submitted)
-- Added dashboard to view saved outputs
-- Introduced simple engagement metric to track adoption
-- Designed for local testing, compatible with future cloud expansion
-
-## Version 1.3 Controlled PID and QC
-
-- Added admin-gated PID visibility during interaction
-- Enforced sanitization before model input when protection is on and before every save in all cases
-- Added a QC loop that checks both sanitized input and sanitized output before saving
-- Surfaces QC findings to reviewers before save
-- Keeps saved outputs sanitized even when identifiers are visible during interaction
-
-## Version 1.3.1 Always-Sanitized Save
-
-- Review submissions now always save after forced sanitization
-- PID may be visible during controlled review but is not persisted
-- QC warnings are captured as metadata instead of blocking storage
-- Reviewer comments are also sanitized before saving
-- Improves evaluation data capture while preserving privacy safeguards
-
-## Version 1.3.2 Session-Isolated Visibility
-
-- Generated output is visible only within the current session
-- Historical saved outputs are hidden from general users
-- Admin mode can review all saved outputs through a protected dashboard
-- Saved outputs still persist locally for audit and review
-- Session reset support clears current-session data without exposing prior outputs
-
-## Sanitization Confidence
-
-Each saved output includes a confidence level:
-- HIGH: low likelihood of remaining identifiers
-- MEDIUM: possible identifiers remain
-- LOW: likely identifiers remain
-
-Manual review is required for all outputs.
-
-## Supported Practitioner Types
-
-- Pharmacist
-- Nurse
-- Wellness Consultant
-- Occupational Therapist
-- General Medical Reviewer
-
-## Human Review Boundary
-
-- All outputs are drafts only and require human review before use.
-- High-risk cases (e.g., flagged safety concerns) are always escalated for mandatory review.
-- The app does not diagnose or make autonomous treatment decisions.
-
-## Important Privacy Note
-
-This prototype should only be used with synthetic or non-identifying data. It is not HIPAA-ready and should not be used with real patient-identifying information.
-
-## Attachment Support
-
-- Optional attachments are supported for txt, md, csv, and pdf files
-- Text-based attachments are sanitized and appended under `Attached Intake/Form Content`
-- PDF uploads record filename only and display a manual review notice
-- Use synthetic or non-identifying data for testing
-
-## Local Setup
-
-Use this once when setting up the project on a new machine or environment.
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-setx OPENAI_API_KEY "your_api_key_here"
-python -m streamlit run app.py --server.port 8501
-```
-
-### Testing Notes
-
-- Use synthetic or non-identifying data only.
-- Do not enter real patient-identifying information.
-- Outputs are sanitized before saving.
-- Saved test outputs are stored locally in the `outputs/` folder.
-- The app is a prototype and all outputs require human review.
-
-**Note:** `.env` and `.streamlit/secrets.toml` should not be committed to version control.
-
-See `project_plan.md` for design details and `eval_set.md` for test cases.
-
-## Dashboard and Tracking
-
-- Outputs can be viewed within the app dashboard
-- Usage metrics track:
-  - total app runs
-  - total reviews submitted
-  - average audit completeness score
-  - most common missing section
-- Empty analytics states now fall back safely instead of interrupting the session
-- Metrics are stored locally in usage.json and not committed to Git
-
-## PID Toggle (Session-Based)
-
-- Identifier handling is controlled via a sidebar toggle
-- Default behavior masks all identifiers
-- Toggle uses Streamlit session state for persistence
-- No global variables are used
-- Designed for safe testing and future extensibility
-
-## Storage Safety
-
-- Raw identifiers are never written to disk
-- Saved files contain sanitized intake text and sanitized generated output only
-- Saved files include attachment metadata and review completion status
-- Reviewer comments are sanitized before save
-- QC validation runs before save and is stored as metadata
-- Manual review is required for every saved output
+- added attachment support, dashboard fallbacks, practitioner-specific prompting, sanitization safeguards, and review workflow refinements across earlier releases

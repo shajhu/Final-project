@@ -287,6 +287,10 @@ def get_secret_value(name: str) -> str | None:
     return str(secret_value) if secret_value else None
 
 
+def get_admin_review_key() -> str | None:
+    return get_secret_value("DRAFTSAFE_ADMIN_KEY") or get_secret_value("ADMIN_REVIEW_KEY")
+
+
 STORAGE_ROOT = resolve_storage_root()
 OUTPUTS_DIR = STORAGE_ROOT / "outputs"
 USAGE_FILE = STORAGE_ROOT / "usage.json"
@@ -1257,8 +1261,9 @@ with st.sidebar:
         ["openai", "claude"],
         disabled=True,
     )
+    configured_admin_key = get_admin_review_key()
     admin_key = st.text_input("Admin Key", type="password")
-    IS_ADMIN = admin_key == "admin123"
+    IS_ADMIN = bool(configured_admin_key) and admin_key == configured_admin_key
     if IS_ADMIN:
         st.session_state["ALLOW_PID"] = st.checkbox(
             "Allow identifiers (admin only)",
@@ -1266,7 +1271,10 @@ with st.sidebar:
         )
     else:
         st.session_state["ALLOW_PID"] = False
-        st.caption("Enter the admin key to enable identifier passthrough for controlled testing.")
+        if configured_admin_key:
+            st.caption("Enter the admin key to enable identifier passthrough for controlled testing.")
+        else:
+            st.caption("Admin-only output access is disabled unless an admin key is configured through environment variables or Streamlit secrets.")
 
     allow_pid = st.session_state["ALLOW_PID"]
     if allow_pid:
